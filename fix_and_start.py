@@ -7,7 +7,7 @@ import os
 import sys
 import subprocess
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "samsung_ops.db")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "rm_ops.db")
 VENV_PYTHON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend", ".venv", "Scripts", "python.exe")
 
 def fix_db():
@@ -129,7 +129,7 @@ def repair_db():
 
 def start_server():
     print("\n" + "=" * 40)
-    print("  启动三星事业部管理平台...")
+    print("  启动零售管理平台...")
     print("  访问地址: http://localhost:9527")
     print("  管理员: admin / admin123")
     print("=" * 40 + "\n")
@@ -144,7 +144,7 @@ def start_server():
 
 if __name__ == "__main__":
     print("=" * 40)
-    print("  三星管理平台 - 数据库修复工具")
+    print("  零售管理平台 - 数据库修复工具")
     print("=" * 40 + "\n")
 
     if fix_db():

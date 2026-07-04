@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 import os
 
 from backend.config import (
-    CORS_ORIGINS, FRONTEND_DIR, PROJECT_DIR, PORT, HOST, ensure_dirs, get_config_summary
+    CORS_ORIGINS, FRONTEND_DIR, PROJECT_DIR, PORT, HOST, ensure_dirs, get_config_summary, DEBUG, SCHEDULER_ENABLED
 )
 from backend.logger import app_logger
 from backend.middleware import (
@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理（FastAPI 推荐方式）"""
     # 启动
     app_logger.info("=" * 50)
-    app_logger.info("三星事业部管理平台 v2.1 正在启动...")
+    app_logger.info("零售管理平台 v2.1 正在启动...")
     app_logger.info(f"配置: {get_config_summary()}")
 
     from backend.models.database import init_db
@@ -40,12 +40,12 @@ async def lifespan(app: FastAPI):
     app_logger.info("数据库初始化完成")
 
     # 启动定时任务调度器
-    if os.getenv("SAMSUNG_SCHEDULER_ENABLED", "true").lower() == "true":
+    if SCHEDULER_ENABLED:
         from backend.services.scheduler_service import start_scheduler
         start_scheduler()
         app_logger.info("定时任务调度器已启动")
     else:
-        app_logger.info("定时任务调度器已禁用（SAMSUNG_SCHEDULER_ENABLED=false）")
+        app_logger.info("定时任务调度器已禁用（RM_SCHEDULER_ENABLED=false）")
 
     app_logger.info(f"服务已就绪，访问 http://localhost:{PORT}")
     app_logger.info("=" * 50)
@@ -63,10 +63,10 @@ async def lifespan(app: FastAPI):
 # ==================== FastAPI 应用 ====================
 
 app = FastAPI(
-    title="三星事业部统一管理平台",
+    title="零售管理统一管理平台",
     version="2.1.0",
-    description="贵州沣范通讯设备有限公司 - 三星事业部运营管理平台",
-    docs_url="/api/docs" if os.getenv("SAMSUNG_DEBUG") == "true" else None,
+    description="贵州沣范通讯设备有限公司 - 零售管理运营平台",
+    docs_url="/api/docs" if DEBUG else None,
     redoc_url=None,
     lifespan=lifespan,
 )
@@ -212,9 +212,9 @@ def serve_manual():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>使用手册 - 三星运营管理系统</title>
+<title>使用手册 - 零售管理系统</title>
 <style>
-  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 40px 24px; color: #1a1a2e; line-height: 1.8; background: #f8fafc; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 40px 24px; color: #1a1a2e; line-height: 1.8; background: #f8fa[...]
   h1 {{ font-size: 2em; border-bottom: 3px solid #1428a0; padding-bottom: 12px; }}
   h2 {{ font-size: 1.5em; margin-top: 40px; color: #1428a0; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }}
   h3 {{ font-size: 1.2em; color: #2d3748; margin-top: 24px; }}
@@ -234,7 +234,7 @@ def serve_manual():
 <body>
 <a class="back-link" href="/dashboard">← 返回系统</a>
 {html_body}
-<p style="margin-top:48px;padding-top:24px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:0.85em;">三星事业部运营管理平台 v2.1 · 最后更新：2026年6月8日</p>
+<p style="margin-top:48px;padding-top:24px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:0.85em;">零售管理运营平台 v2.1 · 最后更新：2026年6月8日</p>
 </body>
 </html>"""
     return HTMLResponse(content=html)
