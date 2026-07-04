@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  samsung-ops:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: samsung-ops-platform
+    restart: unless-stopped
+    ports:
+      - "9527:9527"
+    volumes:
+      # 持久化数据
+      - ../data:/app/data
+      - ../logs:/app/logs
+      # eBoss 文件目录（可选）
+      - /mnt/eboss:/mnt/eboss:ro
+    environment:
+      - SAMSUNG_HOST=0.0.0.0
+      - SAMSUNG_PORT=9527
+      - SAMSUNG_SECRET_KEY=${SAMSUNG_SECRET_KEY:-change-me-in-production}
+      - SAMSUNG_DB_JOURNAL_MODE=delete
+      - SAMSUNG_SCHEDULER_ENABLED=true
+      - SAMSUNG_EBOSS_DIR=${SAMSUNG_EBOSS_DIR:-/mnt/eboss}
+      - SAMSUNG_LOG_LEVEL=${SAMSUNG_LOG_LEVEL:-INFO}
+      - TZ=Asia/Shanghai
+    networks:
+      - samsung-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9527/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  samsung-net:
+    driver: bridge

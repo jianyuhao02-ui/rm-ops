@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1428a0">
+    <link rel="manifest" href="/manifest.json">
+    <title>会员管理 - 三星事业部</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        /* ─── 标签徽章 ─── */
+        .tag-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 500;
+            color: white;
+            margin: 1px 2px;
+        }
+        /* ─── 跟进类型图标 ─── */
+        .followup-type-icon { font-size: 16px; }
+        /* ─── VIP星 ─── */
+        .vip-star { color: #f59e0b; font-size: 14px; }
+        /* ─── Tab 导航 ─── */
+        .tab-nav { display: flex; gap: 0; border-bottom: 2px solid var(--gray-100); margin-bottom: 16px; }
+        .tab-btn {
+            padding: 10px 20px; font-size: 13px; font-weight: 500; cursor: pointer;
+            border: none; background: none; color: var(--gray-500);
+            border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .2s;
+        }
+        .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .tab-btn:hover:not(.active) { color: var(--gray-700); background: var(--gray-50); }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        /* ─── 跟进卡片 ─── */
+        .followup-card {
+            background: #fff; border: 1px solid var(--gray-100); border-radius: 8px;
+            padding: 12px 16px; margin-bottom: 10px; transition: box-shadow .2s;
+        }
+        .followup-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+        .followup-card.resolved { opacity: .55; background: var(--gray-50); }
+        /* ─── 购机时间线 ─── */
+        .timeline { position: relative; padding-left: 24px; }
+        .timeline::before { content:''; position:absolute; left:8px; top:0; bottom:0; width:2px; background: var(--gray-100); }
+        .timeline-item { position: relative; margin-bottom: 16px; }
+        .timeline-dot {
+            position: absolute; left: -20px; top: 4px;
+            width: 10px; height: 10px; border-radius: 50%;
+            background: var(--primary); border: 2px solid white;
+            box-shadow: 0 0 0 2px var(--primary);
+        }
+        /* ─── 标签管理面板 ─── */
+        .tag-item {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 10px; border-radius: 14px; font-size: 12px;
+            font-weight: 500; color: white; cursor: default; margin: 4px;
+        }
+        .tag-item .del-btn { cursor: pointer; opacity: .7; font-size: 13px; }
+        .tag-item .del-btn:hover { opacity: 1; }
+        /* ─── 选色器 ─── */
+        .color-options { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+        .color-dot {
+            width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+            border: 2px solid transparent; transition: transform .15s;
+        }
+        .color-dot:hover, .color-dot.selected { border-color: #333; transform: scale(1.2); }
+    </style>
+</head>
+<body>
+<div class="app-layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main-content">
+        <div class="topbar" id="topbar"></div>
+        <div class="page-content">
+
+            <!-- ── 统计卡片 ── -->
+            <div class="stats-grid" id="statsGrid">
+                <div class="stat-card"><div class="stat-icon blue">👥</div><div class="stat-info"><h4>-</h4><p>会员总数</p></div></div>
+                <div class="stat-card"><div class="stat-icon orange">⭐</div><div class="stat-info"><h4>-</h4><p>VIP客户</p></div></div>
+                <div class="stat-card"><div class="stat-icon green">📱</div><div class="stat-info"><h4>-</h4><p>近30天购机</p></div></div>
+                <div class="stat-card"><div class="stat-icon red">🔔</div><div class="stat-info"><h4>-</h4><p>待跟进</p></div></div>
+            </div>
+
+            <!-- ── Tab 导航 ── -->
+            <div class="card" style="margin-bottom:0;">
+                <div class="card-body" style="padding-bottom:0;">
+                    <div class="tab-nav">
+                        <button class="tab-btn active" onclick="switchTab('tabMembers', this)">👥 客户总览</button>
+                        <button class="tab-btn" onclick="switchTab('tabFollowups', this)">🔔 重点跟进</button>
+                        <button class="tab-btn" onclick="switchTab('tabTags', this)">🏷️ 标签管理</button>
+                        <button class="tab-btn" onclick="switchTab('tabAnalysis', this)">📊 消费分析</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══ Tab 1: 客户总览 ══ -->
+            <div class="tab-panel active card" id="tabMembers">
+                <div class="card-body" style="padding:12px 16px;">
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <input type="text" id="searchKeyword" placeholder="搜索姓名/手机号..." style="width:180px;padding:7px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);font-size:13px;" onkeydown="if(event.key==='Enter')searchMembers()">
+                    <select id="filterLevel" style="padding:7px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);font-size:13px;" onchange="searchMembers()">
+                            <option value="">全部等级</option>
+                            <option value="黑卡">🖤 黑卡</option>
+                            <option value="钻卡">💎 钻卡</option>
+                            <option value="金卡">🥇 金卡</option>
+                            <option value="银卡">🥈 银卡</option>
+                            <option value="普通">普通</option>
+                        </select>
+                        <select id="filterStore" style="padding:7px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);font-size:13px;" onchange="searchMembers()">
+                            <option value="0">全部门店</option>
+                        </select>
+                        <span id="userStoreLabel" style="display:none;font-size:13px;color:var(--gray-500);padding:7px 12px;background:var(--gray-50);border-radius:var(--radius);"></span>
+                        <select id="filterTag" style="padding:7px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);font-size:13px;" onchange="searchMembers()">
+                            <option value="0">全部标签</option>
+                        </select>
+                        <select id="filterVip" style="padding:7px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);font-size:13px;" onchange="searchMembers()">
+                            <option value="-1">VIP筛选</option>
+                            <option value="1">⭐ 仅VIP</option>
+                            <option value="0">非VIP</option>
+                        </select>
+                        <button class="btn btn-primary" style="padding:7px 16px;font-size:13px;width:auto;" onclick="searchMembers()">搜索</button>
+                        <button class="btn" style="padding:7px 16px;font-size:13px;width:auto;background:var(--success);color:white;" onclick="showCreateModal()">+ 新增会员</button>
+                    </div>
+                </div>
+                <div class="card-body" style="overflow-x:auto;padding-top:0;">
+                    <table class="data-table" id="memberTable">
+                        <thead>
+                            <tr>
+                                <th>姓名</th><th>手机号</th><th>等级</th><th>标签</th>
+                                <th>绑定门店</th><th>累计消费</th><th>购机次数</th><th>待跟进</th><th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody><tr><td colspan="9" class="loading-spinner">加载中...</td></tr></tbody>
+                    </table>
+                </div>
+                <div class="card-body" style="padding-top:0;">
+                    <div style="display:flex;justify-content:center;align-items:center;gap:8px;" id="pagination"></div>
+                </div>
+            </div>
+
+            <!-- ══ Tab 2: 重点跟进 ══ -->
+            <div class="tab-panel card" id="tabFollowups">
+                <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                    <h3>🔔 待跟进客户列表</h3>
+                    <select id="followupFilterStore" style="padding:6px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);font-size:13px;" onchange="loadPendingFollowups()">
+                        <option value="0">全部门店</option>
+                    </select>
+                </div>
+                <div class="card-body" id="followupList">
+                    <div class="loading-spinner">加载中...</div>
+                </div>
+            </div>
+
+            <!-- ══ Tab 3: 标签管理 ══ -->
+            <div class="tab-panel card" id="tabTags">
+                <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                    <h3>🏷️ 标签管理</h3>
+                    <button class="btn btn-primary" style="width:auto;padding:6px 16px;font-size:13px;" onclick="showCreateTagModal()">+ 创建标签</button>
+                </div>
+                <div class="card-body" id="tagList">
+                    <div class="loading-spinner">加载中...</div>
+                </div>
+            </div>
+
+            <!-- ══ Tab 4: 消费分析 ══ -->
+            <div class="tab-panel card" id="tabAnalysis">
+                <div class="card-body">
+                    <h3 style="margin-bottom:16px;">📊 消费频次分析</h3>
+                    <div id="freqAnalysis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;"></div>
+
+                    <h3 style="margin-bottom:16px;padding-top:8px;border-top:1px solid var(--gray-100);">🧁 客单价分布</h3>
+                    <div id="ticketDist" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:24px;"></div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+                        <div>
+                            <h3 style="margin-bottom:12px;">📅 消费月份偏好 TOP3</h3>
+                            <div id="monthPref" style="font-size:13px;"></div>
+                        </div>
+                        <div>
+                            <h3 style="margin-bottom:12px;">📱 机型偏好 TOP10</h3>
+                            <div id="modelPref" style="font-size:13px;"></div>
+                        </div>
+                    </div>
+
+                    <h3 style="margin-bottom:12px;">📈 消费习惯概览</h3>
+                    <div id="habitOverview" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;"></div>
+                </div>
+            </div>
+
+        </div><!-- /page-content -->
+    </div>
+</div>
+
+<!-- ══════════════ 会员详情弹窗 ══════════════ -->
+<div class="modal-overlay" id="detailModal">
+    <div class="modal" style="max-width:760px;max-height:90vh;overflow-y:auto;">
+        <div class="modal-header">
+            <h3>👤 <span id="detailMemberName">会员详情</span></h3>
+            <button class="modal-close" onclick="closeModal('detailModal')">&times;</button>
+        </div>
+        <div class="modal-body" id="detailContent"></div>
+        <div class="modal-footer">
+            <button class="btn" style="background:white;border:1px solid var(--gray-200);" onclick="closeModal('detailModal')">关闭</button>
+            <button class="btn" style="width:auto;padding:8px 16px;background:var(--accent);color:white;" id="detailAddPurchaseBtn" onclick="">+ 添加购机</button>
+            <button class="btn" style="width:auto;padding:8px 16px;background:var(--success);color:white;" id="detailAddFollowupBtn" onclick="">+ 跟进</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ 新增/编辑会员弹窗 ══════════════ -->
+<div class="modal-overlay" id="formModal">
+    <div class="modal" style="max-width:480px;">
+        <div class="modal-header">
+            <h3 id="formModalTitle">新增会员</h3>
+            <button class="modal-close" onclick="closeModal('formModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="editMemberId">
+            <div class="form-group"><label>姓名 *</label><input type="text" id="formName" placeholder="请输入姓名"></div>
+            <div class="form-group"><label>手机号 *</label><input type="text" id="formPhone" placeholder="请输入手机号"></div>
+            <div class="form-group">
+                <label>绑定门店</label>
+                <select id="formStore" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:14px;">
+                    <option value="">不绑定</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>会员等级</label>
+                <select id="formLevel" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:14px;">
+                    <option value="普通">普通</option><option value="银卡">银卡</option>
+                    <option value="金卡">金卡</option><option value="钻卡">钻卡</option><option value="黑卡">黑卡</option>
+                </select>
+            </div>
+            <div class="form-group" style="display:flex;align-items:center;gap:12px;">
+                <label style="margin-bottom:0;">设为VIP</label>
+                <input type="checkbox" id="formVip" style="width:16px;height:16px;">
+            </div>
+            <div class="form-group"><label>加入日期</label><input type="date" id="formJoinDate"></div>
+            <div class="form-group"><label>备注</label><textarea id="formRemark" rows="2" placeholder="备注（选填）" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:14px;resize:vertical;"></textarea></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" style="background:white;border:1px solid var(--gray-200);" onclick="closeModal('formModal')">取消</button>
+            <button class="btn btn-primary" style="width:auto;" onclick="saveMember()">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ 购机记录弹窗 ══════════════ -->
+<div class="modal-overlay" id="purchaseModal">
+    <div class="modal" style="max-width:500px;">
+        <div class="modal-header">
+            <h3>📱 添加购机记录</h3>
+            <button class="modal-close" onclick="closeModal('purchaseModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="purchaseMemberId">
+            <div style="margin-bottom:12px;font-size:14px;color:var(--gray-600);">会员：<strong id="purchaseMemberName"></strong></div>
+            <div class="form-group">
+                <label>购买机型</label>
+                <select id="purchaseModel" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:14px;" onchange="updateProductInfo()">
+                    <option value="">手动输入</option>
+                    <option value="S9420">Galaxy S26 (S9420)</option>
+                    <option value="S9470">Galaxy S26+ (S9470)</option>
+                    <option value="S9480">Galaxy S26 Ultra (S9480)</option>
+                    <option value="ZFOLD7">Galaxy Z Fold7</option>
+                    <option value="ZFLIP7">Galaxy Z Flip7</option>
+                    <option value="W26">Galaxy W26</option>
+                    <option value="A56">Galaxy A56</option>
+                    <option value="S25U">Galaxy S25 Ultra</option>
+                </select>
+            </div>
+            <div class="form-group"><label>产品描述</label><input type="text" id="purchaseProduct" placeholder="如：Galaxy S26 Ultra 512GB 幽夜紫"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group"><label>规格</label><input type="text" id="purchaseSpec" placeholder="如：12+512G"></div>
+                <div class="form-group"><label>颜色</label><input type="text" id="purchaseColor" placeholder="如：幽夜紫"></div>
+            </div>
+            <div class="form-group"><label>IMEI串号</label><input type="text" id="purchaseImei" placeholder="选填"></div>
+            <div class="form-group">
+                <label>消费金额 *</label>
+                <input type="number" id="purchaseAmount" placeholder="请输入金额" step="0.01" min="0.01">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group"><label>旧机抵扣型号</label><input type="text" id="purchaseTradeInModel" placeholder="选填"></div>
+                <div class="form-group"><label>旧机抵扣金额</label><input type="number" id="purchaseTradeInAmount" placeholder="0" step="0.01" min="0"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group">
+                    <label>购买门店</label>
+                    <select id="purchaseStore" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:14px;">
+                        <option value="">选择门店</option>
+                    </select>
+                </div>
+                <div class="form-group"><label>购买日期</label><input type="date" id="purchaseDate"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" style="background:white;border:1px solid var(--gray-200);" onclick="closeModal('purchaseModal')">取消</button>
+            <button class="btn btn-primary" style="width:auto;" onclick="savePurchase()">确认</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ 跟进记录弹窗 ══════════════ -->
+<div class="modal-overlay" id="followupModal">
+    <div class="modal" style="max-width:460px;">
+        <div class="modal-header">
+            <h3>📋 添加跟进记录</h3>
+            <button class="modal-close" onclick="closeModal('followupModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="followupMemberId">
+            <div style="margin-bottom:12px;font-size:14px;color:var(--gray-600);">会员：<strong id="followupMemberName"></strong></div>
+            <div class="form-group">
+                <label>跟进方式</label>
+                <select id="followupType" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:14px;">
+                    <option value="call">📞 电话</option>
+                    <option value="wechat">💬 微信</option>
+                    <option value="visit">🏪 到店</option>
+                    <option value="sms">📩 短信</option>
+                </select>
+            </div>
+            <div class="form-group"><label>跟进内容 *</label><textarea id="followupContent" rows="3" placeholder="描述本次跟进情况..." style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:14px;resize:vertical;"></textarea></div>
+            <div class="form-group"><label>跟进结果</label><input type="text" id="followupResult" placeholder="如：客户感兴趣，约下周到店"></div>
+            <div class="form-group"><label>下次跟进日期</label><input type="date" id="followupNextDate"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" style="background:white;border:1px solid var(--gray-200);" onclick="closeModal('followupModal')">取消</button>
+            <button class="btn btn-primary" style="width:auto;" onclick="saveFollowup()">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ 标签设置弹窗 ══════════════ -->
+<div class="modal-overlay" id="tagModal">
+    <div class="modal" style="max-width:420px;">
+        <div class="modal-header">
+            <h3>🏷️ 设置标签</h3>
+            <button class="modal-close" onclick="closeModal('tagModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="tagMemberId">
+            <div style="margin-bottom:12px;font-size:14px;color:var(--gray-600);">会员：<strong id="tagMemberName"></strong></div>
+            <div id="tagCheckboxList" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" style="background:white;border:1px solid var(--gray-200);" onclick="closeModal('tagModal')">取消</button>
+            <button class="btn btn-primary" style="width:auto;" onclick="saveMemberTags()">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ 创建标签弹窗 ══════════════ -->
+<div class="modal-overlay" id="createTagModal">
+    <div class="modal" style="max-width:380px;">
+        <div class="modal-header">
+            <h3>➕ 创建标签</h3>
+            <button class="modal-close" onclick="closeModal('createTagModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group"><label>标签名称 *</label><input type="text" id="newTagName" placeholder="如：意向换机、老客户"></div>
+            <div class="form-group">
+                <label>标签颜色</label>
+                <div class="color-options" id="colorOptions"></div>
+                <input type="hidden" id="newTagColor" value="#1428a0">
+            </div>
+            <div class="form-group"><label>说明</label><input type="text" id="newTagDesc" placeholder="选填"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" style="background:white;border:1px solid var(--gray-200);" onclick="closeModal('createTagModal')">取消</button>
+            <button class="btn btn-primary" style="width:auto;" onclick="saveNewTag()">创建</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+// ─── 全局状态 ──────────────────────────────────────
+let currentPage = 1;
+let stores = [];
+let tagDefs = [];
+const isAdmin = App.user?.role === 'admin';
+const isManager = App.user?.role === 'manager';
+const canEdit = isAdmin || isManager;
+
+const LEVEL_BADGE = { '黑卡': 'danger', '钻卡': 'danger', '金卡': 'warning', '银卡': 'info', '普通': 'success' };
+const FOLLOWUP_ICONS = { call: '📞', wechat: '💬', visit: '🏪', sms: '📩' };
+const PRESET_COLORS = ['#1428a0','#2563eb','#7c3aed','#db2777','#dc2626','#ea580c','#d97706','#16a34a','#0891b2','#475569'];
+const MODEL_NAMES = {
+    S9420:'Galaxy S26', S9470:'Galaxy S26+', S9480:'Galaxy S26 Ultra',
+    ZFOLD7:'Galaxy Z Fold7', ZFLIP7:'Galaxy Z Flip7', W26:'Galaxy W26',
+    A56:'Galaxy A56', S25U:'Galaxy S25 Ultra'
+};
+
+// ─── 初始化 ──────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.init()) return;
+    App.renderSidebar('members');
+    App.renderTopbar('会员管理');
+    await Promise.all([loadStores(), loadTagDefs()]);
+    await Promise.all([loadStats(), searchMembers(), loadPendingFollowups()]);
+    initColorPicker();
+});
+
+function initColorPicker() {
+    const container = document.getElementById('colorOptions');
+    if (!container) return;
+    container.innerHTML = PRESET_COLORS.map(c => `
+        <div class="color-dot ${c === '#1428a0' ? 'selected' : ''}"
+             style="background:${c};" title="${c}"
+             onclick="selectColor('${c}', this)"></div>
+    `).join('');
+}
+
+function selectColor(color, el) {
+    document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
+    el.classList.add('selected');
+    document.getElementById('newTagColor').value = color;
+}
+
+// ─── 加载门店/标签 ──────────────────────────────────────
+async function loadStores() {
+    try {
+        stores = (await App.api('/auth/stores')) || [];
+        const isAdmin = App.user?.role === 'admin';
+        // 非 admin：隐藏门店筛选下拉框，显示当前门店名
+        if (!isAdmin && App.user?.store_id) {
+            const storeName = stores.find(s => s.id === App.user.store_id)?.name || '本门店';
+            document.getElementById('filterStore').style.display = 'none';
+            const label = document.getElementById('userStoreLabel');
+            label.style.display = 'inline-block';
+            label.textContent = '🏪 ' + storeName;
+        }
+        ['filterStore','formStore','purchaseStore','followupFilterStore'].forEach(id => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const defaultOpt = (id === 'filterStore' || id === 'followupFilterStore')
+                ? (isAdmin ? '<option value="0">全部门店</option>' : '')
+                : '<option value="">选择门店</option>';
+            sel.innerHTML = defaultOpt + stores.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            // 非 admin 默认选自己门店且不可改
+            if (!isAdmin && App.user?.store_id) {
+                sel.value = App.user.store_id;
+                if (id !== 'filterStore') sel.disabled = true;
+            }
+        });
+    } catch(e) { console.error(e); }
+}
+
+async function loadTagDefs() {
+    try {
+        tagDefs = await App.api(`/member/tags/defs?token=${App.token}`);
+        const sel = document.getElementById('filterTag');
+        if (sel) sel.innerHTML = '<option value="0">全部标签</option>' +
+            tagDefs.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+    } catch(e) { tagDefs = []; }
+}
+
+// ─── 统计卡片 ──────────────────────────────────────
+async function loadStats() {
+    try {
+        const data = await App.api(`/member/stats?token=${App.token}`);
+        document.getElementById('statsGrid').innerHTML = `
+            <div class="stat-card"><div class="stat-icon blue">👥</div><div class="stat-info"><h4>${data.total}</h4><p>会员总数</p></div></div>
+            <div class="stat-card"><div class="stat-icon orange">⭐</div><div class="stat-info"><h4>${data.vip_count}</h4><p>VIP客户</p></div></div>
+            <div class="stat-card"><div class="stat-icon green">📱</div><div class="stat-info"><h4>${data.purchases_30d}</h4><p>近30天购机</p></div></div>
+            <div class="stat-card"><div class="stat-icon red">🔔</div><div class="stat-info"><h4>${data.pending_followups}</h4><p>待跟进</p></div></div>
+        `;
+    } catch(e) { console.error(e); }
+}
+
+
+// ─── Tab 切换 ──────────────────────────────────────
+function switchTab(tabId, btn) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    btn.classList.add('active');
+    if (tabId === 'tabFollowups') loadPendingFollowups();
+    if (tabId === 'tabTags') loadTagPanel();
+    if (tabId === 'tabAnalysis') loadAnalysis();
+}
+
+// ─── 客户列表 ──────────────────────────────────────
+async function searchMembers(page = 1) {
+    currentPage = page;
+    const params = new URLSearchParams({
+        token: App.token,
+        keyword: document.getElementById('searchKeyword').value.trim(),
+        level: document.getElementById('filterLevel').value,
+        store_id: App.user?.role === 'admin'
+            ? document.getElementById('filterStore').value
+            : (App.user?.store_id || 0),
+        tag_id: document.getElementById('filterTag').value,
+        is_vip: document.getElementById('filterVip').value,
+        page, page_size: 20
+    });
+
+    try {
+        const data = await App.api('/member/list?' + params);
+        const tbody = document.querySelector('#memberTable tbody');
+        if (!data.data || !data.data.length) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:40px;">暂无会员数据</td></tr>';
+        } else {
+            tbody.innerHTML = data.data.map(m => {
+                const tagNames = m.tags ? m.tags.split(',') : [];
+                const tagColors = m.tag_colors ? m.tag_colors.split(',') : [];
+                const tagHtml = tagNames.map((name, i) =>
+                    '<span class="tag-badge" style="background:' + (tagColors[i] || '#666') + '">' + name + '</span>'
+                ).join('');
+                return '<tr>' +
+                    '<td>' + (m.is_vip ? '<span class="vip-star">⭐</span> ' : '') +
+                    '<strong style="cursor:pointer;color:var(--primary);" onclick="showDetail(' + m.id + ')">' + m.name + '</strong></td>' +
+                    '<td>' + m.phone + '</td>' +
+                    '<td><span class="badge-tag ' + (LEVEL_BADGE[m.level] || 'info') + '">' + m.level + '</span></td>' +
+                    '<td>' + (tagHtml || '<span style="color:var(--gray-300);font-size:12px;">无</span>') + '</td>' +
+                    '<td>' + (m.store_name || '--') + '</td>' +
+                    '<td>' + App.formatPrice(m.total_spent) + '</td>' +
+                    '<td>' + (m.purchase_count || 0) + '</td>' +
+                    '<td>' + (m.pending_followups > 0 ? '<span style="color:var(--danger);font-weight:600;">⚡' + m.pending_followups + '</span>' : '<span style="color:var(--gray-300);">-</span>') + '</td>' +
+                    '<td style="white-space:nowrap;">' +
+                    '<button class="btn" style="padding:3px 8px;font-size:11px;background:var(--primary-bg);color:var(--primary);border:none;border-radius:4px;cursor:pointer;" onclick="showDetail(' + m.id + ')">详情</button> ' +
+                    (canEdit ? '<button class="btn" style="padding:3px 8px;font-size:11px;background:#f0fdf4;color:var(--success);border:none;border-radius:4px;cursor:pointer;" onclick="showEditModal(' + m.id + ')">编辑</button> ' : '') +
+                    (canEdit ? '<button class="btn" style="padding:3px 8px;font-size:11px;background:#fffbeb;color:var(--accent);border:none;border-radius:4px;cursor:pointer;" onclick="showTagModal(' + m.id + ',\'' + m.name + '\')">标签</button> ' : '') +
+                    (isAdmin ? '<button class="btn" style="padding:3px 8px;font-size:11px;background:#fef2f2;color:var(--danger);border:none;border-radius:4px;cursor:pointer;" onclick="deleteMember(' + m.id + ',\'' + m.name + '\')">删除</button>' : '') +
+                    '</td></tr>';
+            }).join('');
+        }
+
+        let pagHtml = '';
+        if (data.total_pages > 1) {
+            pagHtml += '<button class="btn" style="padding:4px 10px;font-size:12px;background:white;border:1px solid var(--gray-200);"' + (page <= 1 ? ' disabled' : '') + ' onclick="searchMembers(' + (page - 1) + ')">上一页</button>';
+            for (let i = 1; i <= data.total_pages; i++) {
+                if (i === 1 || i === data.total_pages || (i >= page - 2 && i <= page + 2)) {
+                    pagHtml += '<button class="btn" style="padding:4px 10px;font-size:12px;' + (i === page ? 'background:var(--primary);color:white;' : 'background:white;border:1px solid var(--gray-200);') + '" onclick="searchMembers(' + i + ')">' + i + '</button>';
+                } else if (i === page - 3 || i === page + 3) {
+                    pagHtml += '<span style="color:var(--gray-400);">...</span>';
+                }
+            }
+            pagHtml += '<button class="btn" style="padding:4px 10px;font-size:12px;background:white;border:1px solid var(--gray-200);"' + (page >= data.total_pages ? ' disabled' : '') + ' onclick="searchMembers(' + (page + 1) + ')">下一页</button>';
+        }
+        document.getElementById('pagination').innerHTML = pagHtml + '<span style="font-size:12px;color:var(--gray-400);margin-left:8px;">共 ' + data.total + ' 人</span>';
+    } catch (e) { console.error(e); }
+}
+
+// ─── 会员详情 ──────────────────────────────────────
+async function showDetail(id) {
+    try {
+        const m = await App.api('/member/' + id + '?token=' + App.token);
+        document.getElementById('detailMemberName').textContent = m.name;
+        document.getElementById('detailAddPurchaseBtn').onclick = function () { closeModal('detailModal'); showPurchaseModal(id, m.name); };
+        document.getElementById('detailAddFollowupBtn').onclick = function () { closeModal('detailModal'); showFollowupModal(id, m.name); };
+
+        const tagHtml = (m.tags || []).map(function (t) {
+            return '<span class="tag-badge" style="background:' + t.color + '">' + t.name + '</span>';
+        }).join('') || '<span style="color:var(--gray-300);font-size:12px;">暂无标签</span>';
+
+        var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">' +
+            '<div><b>姓名：</b>' + (m.is_vip ? '⭐ ' : '') + m.name + '</div>' +
+            '<div><b>手机：</b>' + m.phone + '</div>' +
+            '<div><b>等级：</b><span class="badge-tag ' + (LEVEL_BADGE[m.level] || 'info') + '">' + m.level + '</span></div>' +
+            '<div><b>门店：</b>' + (m.store_name || '未绑定') + '</div>' +
+            '<div><b>累计消费：</b><span style="color:var(--primary);font-weight:600;">' + App.formatPrice(m.total_spent) + '</span></div>' +
+            '<div><b>积分：</b>' + ((m.points || 0).toLocaleString()) + '</div>' +
+            '<div><b>加入日期：</b>' + (m.join_date || '--') + '</div>' +
+            '<div><b>备注：</b>' + (m.remark || '--') + '</div></div>' +
+            '<div style="margin-bottom:16px;"><b>标签：</b>' + tagHtml + '</div>';
+
+        const purchases = m.purchases || [];
+        html += '<h4 style="font-size:13px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--gray-100);">📱 购机记录（' + purchases.length + '次）</h4>';
+        if (!purchases.length) {
+            html += '<p style="color:var(--gray-400);text-align:center;padding:12px;">暂无购机记录</p>';
+        } else {
+            html += '<div class="timeline">';
+            html += purchases.map(function (p) {
+                const modelName = MODEL_NAMES[p.model_code] || p.model_code || '未知机型';
+                return '<div class="timeline-item">' +
+                    '<div class="timeline-dot"></div>' +
+                    '<div style="background:var(--gray-50);border-radius:6px;padding:10px 12px;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                    '<strong style="font-size:13px;">' + (p.product_info || modelName) + '</strong>' +
+                    '<span style="color:var(--primary);font-weight:600;">' + App.formatPrice(p.amount) + '</span></div>' +
+                    '<div style="font-size:12px;color:var(--gray-500);margin-top:4px;">' +
+                    (p.spec ? '规格: ' + p.spec + '  ' : '') +
+                    (p.color ? '颜色: ' + p.color + '  ' : '') +
+                    (p.imei ? 'IMEI: ' + p.imei + '  ' : '') +
+                    (p.trade_in_model ? '旧机: ' + p.trade_in_model + '抵扣' + App.formatPrice(p.trade_in_amount) + '  ' : '') +
+                    '</div><div style="font-size:11px;color:var(--gray-400);margin-top:4px;">' +
+                    (p.purchase_date || '') + ' · ' + (p.store_name || '--') + '  积分+' + p.points_earned +
+                    '</div></div></div>';
+            }).join('');
+            html += '</div>';
+        }
+
+        const followups = m.followups || [];
+        html += '<h4 style="font-size:13px;margin:16px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--gray-100);">📋 跟进记录（' + followups.length + '条）</h4>';
+        if (!followups.length) {
+            html += '<p style="color:var(--gray-400);text-align:center;padding:12px;">暂无跟进记录</p>';
+        } else {
+            html += followups.map(function (f) {
+                return '<div class="followup-card ' + (f.is_resolved ? 'resolved' : '') + '">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                    '<span>' + (FOLLOWUP_ICONS[f.followup_type] || '📋') + ' ' + f.content + '</span>' +
+                    (f.is_resolved ? '<span style="font-size:11px;color:var(--success);">✓已完成</span>' : '<button onclick="resolveFollowup(' + f.id + ')" style="font-size:11px;padding:2px 8px;border:1px solid var(--success);border-radius:4px;color:var(--success);background:white;cursor:pointer;">✓完成</button>') +
+                    '</div>' +
+                    (f.result ? '<div style="font-size:12px;color:var(--gray-500);margin-top:4px;">结果: ' + f.result + '</div>' : '') +
+                    '<div style="font-size:11px;color:var(--gray-400);margin-top:4px;">' +
+                    (f.staff_name || '') + ' · ' + (f.created_at ? f.created_at.slice(0, 10) : '') +
+                    (f.next_followup_date ? ' · 下次: <span style="color:var(--accent);">' + f.next_followup_date + '</span>' : '') +
+                    '</div></div>';
+            }).join('');
+        }
+
+        document.getElementById('detailContent').innerHTML = html;
+        openModal('detailModal');
+    } catch (e) { App.toast('加载失败', 'error'); console.error(e); }
+}
+
+// ─── 新增/编辑会员 ──────────────────────────────────────
+function showCreateModal() {
+    document.getElementById('formModalTitle').textContent = '新增会员';
+    document.getElementById('editMemberId').value = '';
+    document.getElementById('formName').value = '';
+    document.getElementById('formPhone').value = '';
+    document.getElementById('formJoinDate').value = '';
+    document.getElementById('formRemark').value = '';
+    document.getElementById('formLevel').value = '普通';
+    document.getElementById('formStore').value = '';
+    document.getElementById('formVip').checked = false;
+    openModal('formModal');
+}
+
+async function showEditModal(id) {
+    try {
+        const m = await App.api('/member/' + id + '?token=' + App.token);
+        document.getElementById('formModalTitle').textContent = '编辑会员';
+        document.getElementById('editMemberId').value = id;
+        document.getElementById('formName').value = m.name;
+        document.getElementById('formPhone').value = m.phone;
+        document.getElementById('formLevel').value = m.level;
+        document.getElementById('formStore').value = m.store_id || '';
+        document.getElementById('formVip').checked = m.is_vip === 1;
+        document.getElementById('formJoinDate').value = m.join_date || '';
+        document.getElementById('formRemark').value = m.remark || '';
+        openModal('formModal');
+    } catch (e) { App.toast('加载失败', 'error'); }
+}
+
+async function saveMember() {
+    const id = document.getElementById('editMemberId').value;
+    const body = {
+        name: document.getElementById('formName').value.trim(),
+        phone: document.getElementById('formPhone').value.trim(),
+        store_id: parseInt(document.getElementById('formStore').value) || null,
+        level: document.getElementById('formLevel').value,
+        is_vip: document.getElementById('formVip').checked ? 1 : 0,
+        join_date: document.getElementById('formJoinDate').value || null,
+        remark: document.getElementById('formRemark').value.trim() || null
+    };
+    if (!body.name || !body.phone) { App.toast('姓名和手机号必填', 'warning'); return; }
+
+    try {
+        if (id) {
+            await App.api('/member/' + id + '?token=' + App.token, { method: 'PUT', body: body });
+        } else {
+            await App.api('/member/create?token=' + App.token, { method: 'POST', body: body });
+        }
+        App.toast(id ? '更新成功' : '创建成功', 'success');
+        closeModal('formModal');
+        await Promise.all([searchMembers(currentPage), loadStats()]);
+    } catch (e) { App.toast(e.message || '操作失败', 'error'); }
+}
+
+async function deleteMember(id, name) {
+    if (!confirm('确定要删除会员「' + name + '」吗？')) return;
+    try {
+        await App.api('/member/' + id + '?token=' + App.token, { method: 'DELETE' });
+        App.toast('已删除', 'success');
+        await Promise.all([searchMembers(currentPage), loadStats()]);
+    } catch (e) { App.toast('删除失败', 'error'); }
+}
+
+// ─── 购机记录 ──────────────────────────────────────
+function showPurchaseModal(memberId, memberName) {
+    document.getElementById('purchaseMemberId').value = memberId;
+    document.getElementById('purchaseMemberName').textContent = memberName;
+    document.getElementById('purchaseAmount').value = '';
+    document.getElementById('purchaseProduct').value = '';
+    document.getElementById('purchaseSpec').value = '';
+    document.getElementById('purchaseColor').value = '';
+    document.getElementById('purchaseImei').value = '';
+    document.getElementById('purchaseTradeInModel').value = '';
+    document.getElementById('purchaseTradeInAmount').value = '';
+    document.getElementById('purchaseModel').value = '';
+    document.getElementById('purchaseStore').value = '';
+    document.getElementById('purchaseDate').value = new Date().toISOString().slice(0, 10);
+    openModal('purchaseModal');
+}
+
+function updateProductInfo() {
+    const code = document.getElementById('purchaseModel').value;
+    if (code && MODEL_NAMES[code]) {
+        document.getElementById('purchaseProduct').value = MODEL_NAMES[code];
+    }
+}
+
+async function savePurchase() {
+    const memberId = document.getElementById('purchaseMemberId').value;
+    const amount = parseFloat(document.getElementById('purchaseAmount').value);
+    if (!amount || amount <= 0) { App.toast('请填写消费金额', 'warning'); return; }
+
+    const body = {
+        amount: amount,
+        model_code: document.getElementById('purchaseModel').value,
+        product_info: document.getElementById('purchaseProduct').value.trim(),
+        spec: document.getElementById('purchaseSpec').value.trim(),
+        color: document.getElementById('purchaseColor').value.trim(),
+        imei: document.getElementById('purchaseImei').value.trim(),
+        trade_in_model: document.getElementById('purchaseTradeInModel').value.trim(),
+        trade_in_amount: parseFloat(document.getElementById('purchaseTradeInAmount').value) || 0,
+        store_id: parseInt(document.getElementById('purchaseStore').value) || null,
+        purchase_date: document.getElementById('purchaseDate').value || null
+    };
+
+    try {
+        const res = await App.api('/member/' + memberId + '/purchase?token=' + App.token, { method: 'POST', body: body });
+        let msg = '购机记录已添加，积分+' + res.points_earned;
+        if (res.level_upgraded) msg += '，升级为【' + res.new_level + '】🎉';
+        App.toast(msg, 'success');
+        closeModal('purchaseModal');
+        await Promise.all([searchMembers(currentPage), loadStats()]);
+    } catch (e) { App.toast(e.message || '添加失败', 'error'); }
+}
+
+// ─── 跟进记录 ──────────────────────────────────────
+function showFollowupModal(memberId, memberName) {
+    document.getElementById('followupMemberId').value = memberId;
+    document.getElementById('followupMemberName').textContent = memberName;
+    document.getElementById('followupType').value = 'call';
+    document.getElementById('followupContent').value = '';
+    document.getElementById('followupResult').value = '';
+    document.getElementById('followupNextDate').value = '';
+    openModal('followupModal');
+}
+
+async function saveFollowup() {
+    const memberId = document.getElementById('followupMemberId').value;
+    const content = document.getElementById('followupContent').value.trim();
+    if (!content) { App.toast('请填写跟进内容', 'warning'); return; }
+
+    const body = {
+        followup_type: document.getElementById('followupType').value,
+        content: content,
+        result: document.getElementById('followupResult').value.trim(),
+        next_followup_date: document.getElementById('followupNextDate').value || null
+    };
+
+    try {
+        await App.api('/member/' + memberId + '/followup?token=' + App.token, { method: 'POST', body: body });
+        App.toast('跟进记录已保存', 'success');
+        closeModal('followupModal');
+        await Promise.all([loadStats(), loadPendingFollowups()]);
+        if (document.getElementById('tabMembers').classList.contains('active')) searchMembers(currentPage);
+    } catch (e) { App.toast(e.message || '保存失败', 'error'); }
+}
+
+async function resolveFollowup(followupId) {
+    try {
+        await App.api('/member/followups/' + followupId + '/resolve?token=' + App.token, { method: 'PUT', body: { is_resolved: 1 } });
+        App.toast('已标记完成', 'success');
+        await Promise.all([loadStats(), loadPendingFollowups()]);
+    } catch (e) { App.toast('操作失败', 'error'); }
+}
+
+// ─── 待跟进列表 ──────────────────────────────────────
+async function loadPendingFollowups() {
+    const storeId = document.getElementById('followupFilterStore') ? document.getElementById('followupFilterStore').value : 0;
+    const container = document.getElementById('followupList');
+    container.innerHTML = '<div class="loading-spinner">加载中...</div>';
+
+    try {
+        const data = await App.api('/member/followups/pending?token=' + App.token + '&store_id=' + storeId + '&page_size=50');
+        if (!data.data || !data.data.length) {
+            container.innerHTML = '<p style="text-align:center;color:var(--gray-400);padding:40px;">🎉 暂无待跟进客户</p>';
+            return;
+        }
+        container.innerHTML = data.data.map(function (f) {
+            return '<div class="followup-card">' +
+                '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
+                '<div>' +
+                '<span style="font-weight:600;font-size:14px;cursor:pointer;color:var(--primary);" onclick="showDetail(' + f.member_id + ')">' +
+                (f.is_vip ? '⭐ ' : '') + f.member_name + '</span>' +
+                '<span style="margin-left:8px;font-size:12px;color:var(--gray-500);">' + f.member_phone + '</span>' +
+                '<span class="badge-tag ' + (LEVEL_BADGE[f.member_level] || 'info') + '" style="margin-left:6px;font-size:11px;">' + f.member_level + '</span>' +
+                '</div>' +
+                '<div style="display:flex;gap:6px;">' +
+                '<button onclick="resolveFollowup(' + f.id + ')" style="font-size:11px;padding:3px 10px;border:1px solid var(--success);border-radius:4px;color:var(--success);background:white;cursor:pointer;">✓完成</button>' +
+                '<button onclick="showFollowupModal(' + f.member_id + ',\'' + f.member_name + '\')" style="font-size:11px;padding:3px 10px;border:1px solid var(--primary);border-radius:4px;color:var(--primary);background:white;cursor:pointer;">续跟进</button>' +
+                '</div></div>' +
+                '<div style="margin-top:8px;font-size:13px;">' + (FOLLOWUP_ICONS[f.followup_type] || '📋') + ' ' + f.content + '</div>' +
+                (f.result ? '<div style="font-size:12px;color:var(--gray-500);margin-top:4px;">结果：' + f.result + '</div>' : '') +
+                '<div style="font-size:11px;color:var(--gray-400);margin-top:6px;display:flex;gap:16px;">' +
+                '<span>📍 ' + (f.store_name || '--') + '</span>' +
+                '<span>👤 ' + (f.staff_name || '--') + '</span>' +
+                '<span>📅 创建于 ' + (f.created_at ? f.created_at.slice(0, 10) : '') + '</span>' +
+                (f.next_followup_date ? '<span style="color:var(--danger);font-weight:500;">⏰ 下次跟进：' + f.next_followup_date + '</span>' : '') +
+                '</div></div>';
+        }).join('');
+    } catch (e) { container.innerHTML = '<p style="color:var(--danger);text-align:center;">加载失败</p>'; }
+}
+
+// ─── 标签管理面板 ──────────────────────────────────────
+async function loadTagPanel() {
+    await loadTagDefs();
+    const container = document.getElementById('tagList');
+    if (!tagDefs.length) {
+        container.innerHTML = '<p style="text-align:center;color:var(--gray-400);padding:24px;">暂无标签，点击右上角创建</p>';
+        return;
+    }
+    var html = '<div style="margin-bottom:12px;font-size:13px;color:var(--gray-500);">共 ' + tagDefs.length + ' 个标签</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+    html += tagDefs.map(function (t) {
+        return '<div class="tag-item" style="background:' + t.color + '">' + t.name +
+            '<span style="font-size:11px;opacity:.8;">(' + t.member_count + '人)</span>' +
+            (isAdmin ? '<span class="del-btn" onclick="deleteTagDef(' + t.id + ',\'' + t.name + '\')">×</span>' : '') +
+            '</div>';
+    }).join('');
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function showCreateTagModal() { openModal('createTagModal'); }
+
+async function saveNewTag() {
+    const name = document.getElementById('newTagName').value.trim();
+    if (!name) { App.toast('请输入标签名称', 'warning'); return; }
+    const body = {
+        name: name,
+        color: document.getElementById('newTagColor').value,
+        description: document.getElementById('newTagDesc').value.trim()
+    };
+    try {
+        await App.api('/member/tags/defs?token=' + App.token, { method: 'POST', body: body });
+        App.toast('标签创建成功', 'success');
+        closeModal('createTagModal');
+        document.getElementById('newTagName').value = '';
+        document.getElementById('newTagDesc').value = '';
+        await Promise.all([loadTagDefs(), loadTagPanel()]);
+    } catch (e) { App.toast(e.message || '创建失败', 'error'); }
+}
+
+async function deleteTagDef(id, name) {
+    if (!confirm('确定删除标签「' + name + '」？关联的会员标签也会一起清除。')) return;
+    try {
+        await App.api('/member/tags/defs/' + id + '?token=' + App.token, { method: 'DELETE' });
+        App.toast('已删除', 'success');
+        await Promise.all([loadTagDefs(), loadTagPanel()]);
+    } catch (e) { App.toast('删除失败', 'error'); }
+}
+
+// ─── 会员打标签 ──────────────────────────────────────
+async function showTagModal(memberId, memberName) {
+    document.getElementById('tagMemberId').value = memberId;
+    document.getElementById('tagMemberName').textContent = memberName;
+
+    var currentTagIds = [];
+    try {
+        const m = await App.api('/member/' + memberId + '?token=' + App.token);
+        currentTagIds = (m.tags || []).map(function (t) { return t.id; });
+    } catch (e) {}
+
+    const container = document.getElementById('tagCheckboxList');
+    container.innerHTML = tagDefs.map(function (t) {
+        return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 8px;border-radius:6px;border:1px solid var(--gray-200);">' +
+            '<input type="checkbox" value="' + t.id + '" ' + (currentTagIds.includes(t.id) ? 'checked' : '') + '>' +
+            '<span class="tag-badge" style="background:' + t.color + '">' + t.name + '</span></label>';
+    }).join('');
+    openModal('tagModal');
+}
+
+async function saveMemberTags() {
+    const memberId = document.getElementById('tagMemberId').value;
+    const tag_ids = Array.from(document.querySelectorAll('#tagCheckboxList input:checked')).map(function (el) { return parseInt(el.value); });
+    try {
+        await App.api('/member/' + memberId + '/tags?token=' + App.token, { method: 'PUT', body: { tag_ids: tag_ids } });
+        App.toast('标签已更新', 'success');
+        closeModal('tagModal');
+        await searchMembers(currentPage);
+    } catch (e) { App.toast('更新失败', 'error'); }
+}
+
+// ─── 消费分析 Tab ──────────────────────────────────────
+async function loadAnalysis() {
+    try {
+        const data = await App.api('/member/stats?token=' + App.token);
+        if (!data) return;
+
+        const freq = data.frequency_analysis || {};
+        const freqTotal = (freq.high || 0) + (freq.mid || 0) + (freq.low || 0) + (freq.none || 0);
+        const freqEl = document.getElementById('freqAnalysis');
+        if (freqEl) freqEl.innerHTML = [
+            { label: '高频消费', sub: '≥10次', count: freq.high || 0, color: '#dc2626', bg: '#fef2f2' },
+            { label: '中频消费', sub: '3-9次', count: freq.mid || 0, color: '#d97706', bg: '#fffbeb' },
+            { label: '低频消费', sub: '1-2次', count: freq.low || 0, color: '#2563eb', bg: '#eff6ff' },
+            { label: '无消费', sub: '0次', count: freq.none || 0, color: '#6b7280', bg: '#f9fafb' },
+        ].map(function (f) {
+            const pct = freqTotal > 0 ? Math.round(f.count / freqTotal * 100) : 0;
+            return '<div style="background:' + f.bg + ';border-radius:8px;padding:12px 14px;border-left:3px solid ' + f.color + ';">' +
+                '<div style="font-size:11px;color:' + f.color + ';font-weight:600;">' + f.label + '（' + f.sub + '）</div>' +
+                '<div style="font-size:22px;font-weight:700;color:' + f.color + ';margin:4px 0;">' + f.count + '</div>' +
+                '<div style="font-size:11px;color:var(--gray-400);">占比 ' + pct + '%</div></div>';
+        }).join('');
+
+        const tkt = data.avg_ticket_distribution || {};
+        const tktItems = [
+            { label: '< 1,000元', count: tkt.lt1000 || 0, color: '#6b7280' },
+            { label: '1,000-2,999元', count: tkt['1000_2999'] || 0, color: '#2563eb' },
+            { label: '3,000-4,999元', count: tkt['3000_4999'] || 0, color: '#7c3aed' },
+            { label: '5,000-7,999元', count: tkt['5000_7999'] || 0, color: '#d97706' },
+            { label: '≥ 8,000元', count: tkt.gte8000 || 0, color: '#dc2626' },
+        ];
+        const tktMax = Math.max(...tktItems.map(function (i) { return i.count; }), 1);
+        const tktEl = document.getElementById('ticketDist');
+        if (tktEl) tktEl.innerHTML = tktItems.map(function (t) {
+            const pct = Math.round(t.count / tktMax * 100);
+            return '<div><div style="font-size:11px;color:var(--gray-500);margin-bottom:4px;">' + t.label + '</div>' +
+                '<div style="height:22px;background:var(--gray-100);border-radius:4px;overflow:hidden;margin-bottom:2px;">' +
+                '<div style="height:100%;width:' + pct + '%;background:' + t.color + ';border-radius:4px;transition:width .4s;"></div></div>' +
+                '<div style="font-size:12px;color:' + t.color + ';font-weight:600;">' + t.count + ' 人</div></div>';
+        }).join('');
+
+        const monthNames = ['', '1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+        const monthPref = (data.month_preference || []).map(function (m) {
+            return { month: monthNames[parseInt(m.month)] || m.month, count: m.count };
+        });
+        const mpEl = document.getElementById('monthPref');
+        if (mpEl) mpEl.innerHTML = monthPref.length
+            ? monthPref.map(function (m) {
+                return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--gray-50);">' +
+                    '<span style="color:var(--gray-600);font-size:13px;">' + m.month + '</span>' +
+                    '<span style="color:var(--primary);font-weight:600;font-size:13px;">' + m.count + ' 次</span></div>';
+            }).join('')
+            : '<div style="color:var(--gray-400);font-size:13px;">暂无数据</div>';
+
+        const modelPref = (data.model_preference || []);
+        const modelMax = Math.max(...modelPref.map(function (i) { return i.cnt; }), 1);
+        const modEl = document.getElementById('modelPref');
+        if (modEl) modEl.innerHTML = modelPref.length
+            ? modelPref.map(function (m, i) {
+                return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">' +
+                    '<span style="font-size:11px;color:var(--gray-400);width:18px;">#' + (i + 1) + '</span>' +
+                    '<span style="font-size:13px;color:var(--gray-700);width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + m.model_code + '</span>' +
+                    '<div style="flex:1;height:16px;background:var(--gray-100);border-radius:3px;overflow:hidden;">' +
+                    '<div style="height:100%;width:' + Math.round(m.cnt / modelMax * 100) + '%;background:var(--primary);border-radius:3px;"></div></div>' +
+                    '<span style="font-size:12px;color:var(--gray-600);width:45px;text-align:right;">' + m.cnt + ' 次</span>' +
+                    '<span style="font-size:11px;color:var(--gray-400);width:65px;text-align:right;">均 ' + App.formatPrice(m.avg_amount) + '</span></div>';
+            }).join('')
+            : '<div style="color:var(--gray-400);font-size:13px;">暂无数据</div>';
+
+        const avgCycle = data.avg_upgrade_cycle_days || 0;
+        const priceStd = data.price_stddev || 0;
+        const habEl = document.getElementById('habitOverview');
+        if (habEl) habEl.innerHTML = [
+            { label: '平均换机周期', value: avgCycle > 0 ? avgCycle + ' 天' : '暂无数据', icon: '🔄', color: '#2563eb' },
+            { label: '价格离散度（σ）', value: priceStd > 0 ? Math.round(priceStd) + ' 元' : '暂无数据', icon: '📊', color: '#7c3aed' },
+            { label: '门店覆盖', value: (data.store_distribution || []).length + ' 家', icon: '🏪', color: '#0891b2' },
+        ].map(function (h) {
+            return '<div style="background:var(--gray-50);border-radius:8px;padding:14px 16px;text-align:center;">' +
+                '<div style="font-size:20px;margin-bottom:6px;">' + h.icon + '</div>' +
+                '<div style="font-size:12px;color:var(--gray-500);margin-bottom:4px;">' + h.label + '</div>' +
+                '<div style="font-size:16px;font-weight:700;color:' + h.color + ';">' + h.value + '</div></div>';
+        }).join('');
+
+    } catch (e) { console.error('loadAnalysis error:', e); }
+}
+
+// ─── 工具函数 ──────────────────────────────────────
+function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+document.querySelectorAll('.modal-overlay').forEach(function (o) { o.addEventListener('click', function (e) { if (e.target === o) o.style.display = 'none'; }); });
+</script>
+<script src="/js/ai-assistant.js?v=3.0"></script>
+</body>
+</html>

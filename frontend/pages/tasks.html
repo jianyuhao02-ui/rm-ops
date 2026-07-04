@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1428a0">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <title>任务管理 - 三星事业部</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .task-card { padding: 14px 16px; border: 1px solid var(--gray-200); border-radius: var(--radius); margin-bottom: 10px; transition: all .2s; }
+        .task-card:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(20,40,160,.1); }
+        .task-card.urgent { border-left: 4px solid #ef4444; }
+        .task-card.high { border-left: 4px solid #f59e0b; }
+        .task-card.completed { opacity: .6; }
+        .priority-tag { font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 600; }
+        .priority-tag.urgent { background: #fee2e2; color: #991b1b; }
+        .priority-tag.high { background: #fef3c7; color: #92400e; }
+        .priority-tag.normal { background: #e0e7ff; color: #3730a3; }
+        .priority-tag.low { background: #f3f4f6; color: #6b7280; }
+        .tab-bar { display: flex; gap: 0; border-bottom: 2px solid var(--gray-200); margin-bottom: 16px; }
+        .tab-item { padding: 8px 16px; cursor: pointer; font-size: 13px; color: var(--gray-500); border-bottom: 2px solid transparent; margin-bottom: -2px; }
+        .tab-item.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+    </style>
+</head>
+<body>
+<div class="app-layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main-content">
+        <div class="topbar" id="topbar"></div>
+        <div class="page-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <div class="tab-bar" style="margin-bottom:0; border:none;">
+                    <span class="tab-item active" onclick="switchTab('all')">全部</span>
+                    <span class="tab-item" onclick="switchTab('pending')">待处理</span>
+                    <span class="tab-item" onclick="switchTab('in_progress')">进行中</span>
+                    <span class="tab-item" onclick="switchTab('completed')">已完成</span>
+                </div>
+                <button class="btn btn-primary" style="width:auto; padding:8px 16px;" onclick="showCreateModal()">+ 新建任务</button>
+            </div>
+            <div id="taskList"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 新建弹窗 -->
+<div class="modal-overlay" id="createModal">
+    <div class="modal-content" style="width:480px;">
+        <div class="modal-header"><h3>创建任务</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
+        <div class="modal-body">
+            <div class="form-group"><label>任务标题</label><input type="text" id="taskTitle" style="width:100%;" placeholder="输入任务标题"></div>
+            <div class="form-group"><label>描述</label><textarea id="taskDesc" rows="3" style="width:100%;" placeholder="任务详细描述"></textarea></div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div class="form-group"><label>优先级</label>
+                    <select id="taskPriority" style="width:100%;">
+                        <option value="urgent">🔴 紧急</option><option value="high">🟠 高</option>
+                        <option value="normal" selected>🔵 普通</option><option value="low">⚪ 低</option>
+                    </select>
+                </div>
+                <div class="form-group"><label>截止日期</label><input type="date" id="taskDue" style="width:100%;"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" onclick="closeModal()">取消</button>
+            <button class="btn btn-primary" style="width:auto;" onclick="createTask()">创建</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+let currentTab = 'all';
+let allTasks = [];
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.init()) return;
+    App.renderSidebar('tasks');
+    App.renderTopbar('任务管理');
+    await loadTasks();
+});
+
+function switchTab(tab) { currentTab = tab; document.querySelectorAll('.tab-item').forEach((t,i) => t.classList.toggle('active', i===['all','pending','in_progress','completed'].indexOf(tab))); renderTasks(); }
+
+async function loadTasks() {
+    try {
+        const data = await App.api(`/tasks/list?status=${currentTab==='all'?'':currentTab}&token=${App.token}`);
+        allTasks = data.tasks || [];
+        updateStats(data.stats);
+        renderTasks();
+    } catch(e) { console.error(e); }
+}
+
+function updateStats(stats) {
+    if (!stats) return;
+    const tabs = document.querySelectorAll('.tab-item');
+    tabs[0].textContent = `全部 (${stats.pending + stats.in_progress + stats.completed})`;
+    tabs[1].textContent = `待处理 (${stats.pending})`;
+    tabs[2].textContent = `进行中 (${stats.in_progress})`;
+    tabs[3].textContent = `已完成 (${stats.completed})`;
+}
+
+function renderTasks() {
+    const tasks = currentTab === 'all' ? allTasks : allTasks.filter(t => t.status === currentTab);
+    if (!tasks.length) {
+        document.getElementById('taskList').innerHTML = '<p style="text-align:center; color:var(--gray-400); padding:40px;">暂无任务</p>';
+        return;
+    }
+    document.getElementById('taskList').innerHTML = tasks.map(t => {
+        const due = t.due_date ? `📅 ${t.due_date}` : '';
+        const statusMap = {pending:'⏳待处理', in_progress:'🔄进行中', completed:'✅已完成', cancelled:'❌已取消'};
+        return `<div class="task-card ${t.priority} ${t.status==='completed'?'completed':''}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <div style="flex:1;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="priority-tag ${t.priority}">${t.priority==='urgent'?'紧急':t.priority==='high'?'高':t.priority==='normal'?'普通':'低'}</span>
+                        <strong>${t.title}</strong>
+                    </div>
+                    ${t.description ? `<p style="font-size:13px; color:var(--gray-500); margin-top:6px;">${t.description}</p>` : ''}
+                    <div style="font-size:12px; color:var(--gray-400); margin-top:6px;">
+                        ${t.assignee_name ? `👤 ${t.assignee_name}` : ''} ${t.store_name ? `· ${t.store_name}` : ''} · ${due}
+                    </div>
+                </div>
+                <div style="display:flex; gap:6px; flex-shrink:0;">
+                    <span style="font-size:12px; color:var(--gray-400);">${statusMap[t.status]||t.status}</span>
+                    ${t.status !== 'completed' ? `<button class="action-btn" onclick="updateStatus(${t.id}, 'completed')">✅</button>` : ''}
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function updateStatus(id, status) {
+    try {
+        await App.api(`/tasks/${id}?token=${App.token}`, { method:'PUT', body:{status} });
+        App.toast('任务状态已更新', 'success');
+        await loadTasks();
+    } catch(e) { App.toast('操作失败', 'error'); }
+}
+
+function showCreateModal() { document.getElementById('createModal').classList.add('show'); }
+function closeModal() { document.getElementById('createModal').classList.remove('show'); }
+
+async function createTask() {
+    const body = {
+        title: document.getElementById('taskTitle').value,
+        description: document.getElementById('taskDesc').value,
+        priority: document.getElementById('taskPriority').value,
+        due_date: document.getElementById('taskDue').value || null,
+    };
+    if (!body.title) return App.toast('请输入任务标题', 'error');
+    try {
+        await App.api(`/tasks/create?token=${App.token}`, { method:'POST', body });
+        App.toast('任务已创建', 'success');
+        closeModal();
+        document.getElementById('taskTitle').value = ''; document.getElementById('taskDesc').value = '';
+        await loadTasks();
+    } catch(e) { App.toast('创建失败: ' + e.message, 'error'); }
+}
+</script>
+<script src="/js/ai-assistant.js?v=3.0"></script>
+</body>
+</html>

@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1428a0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="三星管理">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <title>销售进度 - 三星事业部</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        .source-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500;
+        }
+        .source-badge.eboss { background: #e8f5e9; color: #2e7d32; }
+        .source-badge.manual { background: #fff3e0; color: #e65100; }
+        .report-header {
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+        }
+        .report-header .left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .report-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .report-table th {
+            background: var(--primary); color: #fff; padding: 10px 8px;
+            font-weight: 600; text-align: center; border: 1px solid rgba(255,255,255,.2);
+            white-space: nowrap; font-size: 12px;
+        }
+        .report-table td {
+            padding: 9px 8px; border: 1px solid var(--gray-200); text-align: right;
+        }
+        .report-table td:first-child, .report-table td:nth-child(2) { text-align: left; font-weight: 600; }
+        .report-table tr:nth-child(even) { background: #fafbfc; }
+        .report-table tr.total-row { background: #e8eef6 !important; font-weight: 700; }
+        .report-table tr.total-row td { border-top: 2px solid var(--primary); }
+        .rate-cell { text-align: center !important; }
+        .rate-bar {
+            display: inline-flex; align-items: center; gap: 4px;
+        }
+        .mini-bar {
+            width: 50px; height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden;
+        }
+        .mini-bar .fill { height: 100%; border-radius: 3px; }
+        .mini-bar .fill.green { background: #10b981; }
+        .mini-bar .fill.yellow { background: #f59e0b; }
+        .mini-bar .fill.red { background: #ef4444; }
+        .rate-text { font-weight: 600; font-size: 12px; }
+        .btn-export {
+            padding: 8px 16px; font-size: 13px; border-radius: var(--radius);
+            border: 1.5px solid var(--primary); color: var(--primary); background: #fff;
+            cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;
+            transition: all .2s;
+        }
+        .btn-export:hover { background: var(--primary); color: #fff; }
+        /* View tabs */
+        .view-tabs { display: flex; gap: 0; margin: 16px 0; border-bottom: 2px solid var(--gray-200); }
+        .view-tab {
+            padding: 10px 20px; font-size: 14px; font-weight: 500; cursor: pointer;
+            color: var(--gray-500); border-bottom: 2px solid transparent; margin-bottom: -2px;
+            transition: all .2s; background: none; border-top: none; border-left: none; border-right: none;
+        }
+        .view-tab:hover { color: var(--primary); }
+        .view-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .compare-card {
+            background: #f8fafc; border-radius: var(--radius); padding: 16px;
+            margin-bottom: 12px; border: 1px solid var(--gray-200);
+        }
+        .compare-card .store-name { font-weight: 600; font-size: 14px; }
+        .compare-card .change-up { color: #10b981; font-weight: 600; }
+        .compare-card .change-down { color: #ef4444; font-weight: 600; }
+        .change-neutral { color: var(--gray-400); }
+        .ranking-medal { font-size: 22px; }
+        .ranking-row { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--gray-100); gap: 12px; }
+        .ranking-row:hover { background: #f0f4ff; }
+        .ranking-num { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+        .ranking-num.top { background: #fef3c7; color: #b45309; }
+        .ranking-num.normal { background: var(--gray-100); color: var(--gray-500); }
+        .detail-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+        .detail-table th {
+            background: var(--gray-50); color: var(--gray-700); padding: 8px;
+            font-weight: 600; text-align: center; border: 1px solid var(--gray-200);
+        }
+        .detail-table td {
+            padding: 7px 8px; border: 1px solid var(--gray-200); text-align: center;
+        }
+        .detail-table tr:hover { background: #f5f7fa; }
+        .store-detail-row {
+            cursor: pointer; transition: background .15s;
+        }
+        .store-detail-row:hover { background: #eef3fb !important; }
+        .store-detail-row .expand-icon {
+            display: inline-block; width: 16px; text-align: center; font-size: 11px;
+            color: var(--gray-400); transition: transform .2s;
+        }
+        .store-detail-row.expanded .expand-icon { transform: rotate(90deg); }
+        .daily-detail { display: none; }
+        .daily-detail.show { display: table-row; }
+    </style>
+</head>
+<body>
+<div class="app-layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main-content">
+        <div class="topbar" id="topbar"></div>
+        <div class="page-content">
+            <!-- 顶部控制区 -->
+            <div class="report-header">
+                <div class="left">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <label style="font-size:14px; font-weight:600;">月份：</label>
+                        <input type="month" id="monthPicker" style="padding:8px 12px; border:1px solid var(--gray-200); border-radius:var(--radius); font-size:14px;">
+                    </div>
+                    <div id="sourceInfo"></div>
+                </div>
+                <div style="display:flex; gap:8px;" id="actionBtns"></div>
+            </div>
+
+            <!-- 汇总卡片 -->
+            <div class="stats-grid" id="summaryCards"></div>
+
+            <!-- 月度任务报表主表 -->
+            <div class="card" style="margin-top:16px;">
+                <div class="card-header">
+                    <h3>📊 月度任务报表</h3>
+                    <span style="font-size:12px; color:var(--gray-400);" id="updateTime"></span>
+                </div>
+                <div class="card-body" style="overflow-x:auto;">
+                    <table class="report-table" id="reportTable">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" style="min-width:50px;">等级</th>
+                                <th rowspan="2" style="min-width:80px;">门店</th>
+                                <th colspan="3" style="background:#1430a0;">手机销售额</th>
+                                <th colspan="3" style="background:#1976d2;">NCME</th>
+                                <th rowspan="2">手机<br>台量</th>
+                                <th colspan="3" style="background:#f57c00;">重点机型</th>
+                                <th colspan="3" style="background:#7b1fa2;">配件</th>
+                                <th rowspan="2">回收<br>台量</th>
+                                <th rowspan="2">回收<br>占比</th>
+                            </tr>
+                            <tr>
+                                <th style="background:#1430a0;">目标</th><th style="background:#1430a0;">完成</th><th style="background:#1430a0;">完成率</th>
+                                <th style="background:#1976d2;">目标</th><th style="background:#1976d2;">完成</th><th style="background:#1976d2;">完成率</th>
+                                <th style="background:#f57c00;">目标</th><th style="background:#f57c00;">完成</th><th style="background:#f57c00;">完成率</th>
+                                <th style="background:#7b1fa2;">目标</th><th style="background:#7b1fa2;">完成</th><th style="background:#7b1fa2;">完成率</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportBody"><tr><td colspan="17" style="text-align:center; padding:30px; color:var(--gray-400);">加载中...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 每日趋势 -->
+            <div class="card" style="margin-top:16px;">
+                <div class="card-header"><h3>📈 每日销售趋势</h3></div>
+                <div class="card-body"><canvas id="dailyChart" height="200"></canvas></div>
+            </div>
+
+            <!-- 视图切换 -->
+            <div class="view-tabs">
+                <button class="view-tab active" onclick="switchView('report')">📊 月度报表</button>
+                <button class="view-tab" onclick="switchView('compare')">📈 对比分析</button>
+                <button class="view-tab" onclick="switchView('ranking')">🏆 门店排名</button>
+            </div>
+
+            <!-- 月度任务报表 -->
+            <div id="viewReport" class="card" style="margin-top:0;">
+                <div class="card-header">
+                    <h3>📊 月度任务报表</h3>
+                    <span style="font-size:12px; color:var(--gray-400);" id="updateTime"></span>
+                </div>
+                <div class="card-body" style="overflow-x:auto;">
+                    <table class="report-table" id="reportTable">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" style="min-width:50px;">等级</th>
+                                <th rowspan="2" style="min-width:80px;">门店</th>
+                                <th colspan="3" style="background:#1430a0;">手机销售额</th>
+                                <th colspan="3" style="background:#1976d2;">NCME</th>
+                                <th rowspan="2">手机<br>台量</th>
+                                <th colspan="3" style="background:#f57c00;">重点机型</th>
+                                <th colspan="3" style="background:#7b1fa2;">配件</th>
+                                <th rowspan="2">回收<br>台量</th>
+                                <th rowspan="2">回收<br>占比</th>
+                            </tr>
+                            <tr>
+                                <th style="background:#1430a0;">目标</th><th style="background:#1430a0;">完成</th><th style="background:#1430a0;">完成率</th>
+                                <th style="background:#1976d2;">目标</th><th style="background:#1976d2;">完成</th><th style="background:#1976d2;">完成率</th>
+                                <th style="background:#f57c00;">目标</th><th style="background:#f57c00;">完成</th><th style="background:#f57c00;">完成率</th>
+                                <th style="background:#7b1fa2;">目标</th><th style="background:#7b1fa2;">完成</th><th style="background:#7b1fa2;">完成率</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportBody"><tr><td colspan="17" style="text-align:center; padding:30px; color:var(--gray-400);">加载中...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 对比分析 -->
+            <div id="viewCompare" class="card" style="margin-top:0; display:none;">
+                <div class="card-header">
+                    <h3>📈 销售对比分析</h3>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn" id="btnCompareMom" style="padding:6px 14px; font-size:12px; background:var(--primary); color:#fff; border:none; border-radius:var(--radius);" onclick="switchCompare('mom')">环比上月</button>
+                        <button class="btn" id="btnCompareYoy" style="padding:6px 14px; font-size:12px; border:1px solid var(--gray-200); border-radius:var(--radius);" onclick="switchCompare('yoy')">同比去年</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:12px;" id="compareCards"></div>
+                    <div style="margin-top:16px; background:#f0f4ff; padding:16px; border-radius:var(--radius);" id="compareSummary"></div>
+                    <div style="margin-top:16px;"><canvas id="compareChart" height="250"></canvas></div>
+                </div>
+            </div>
+
+            <!-- 门店排名 -->
+            <div id="viewRanking" class="card" style="margin-top:0; display:none;">
+                <div class="card-header">
+                    <h3>🏆 门店销售排名</h3>
+                    <select id="rankMetric" style="padding:6px 12px; border:1px solid var(--gray-200); border-radius:var(--radius); font-size:13px;" onchange="loadRanking()">
+                        <option value="phone_sales_rate">手机完成率</option>
+                        <option value="ncme_rate">NCME完成率</option>
+                        <option value="acc_rate">配件完成率</option>
+                        <option value="phone_qty">手机台量</option>
+                        <option value="phone_sales">手机销售额</option>
+                        <option value="trade_in">回收台量</option>
+                    </select>
+                </div>
+                <div class="card-body" id="rankingBody"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 录入弹窗 -->
+<div class="modal-overlay" id="recordModal" style="display:none;">
+    <div class="modal-box" style="width:520px;">
+        <div class="modal-header">
+            <h3>录入每日销售数据</h3>
+            <button class="modal-close" onclick="closeRecordModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div class="form-group">
+                    <label>日期</label>
+                    <input type="date" id="recDate">
+                </div>
+                <div class="form-group">
+                    <label>门店</label>
+                    <select id="recStore" style="width:100%; padding:10px; border:1.5px solid var(--gray-200); border-radius:var(--radius); font-size:14px;">
+                    </select>
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div class="form-group"><label>手机销售额（¥）</label><input type="number" id="recPhoneSales" placeholder="0"></div>
+                <div class="form-group"><label>NCME销售额（¥）</label><input type="number" id="recNcme" placeholder="0"></div>
+                <div class="form-group"><label>手机台量</label><input type="number" id="recQty" placeholder="0"></div>
+                <div class="form-group"><label>重点机型台量</label><input type="number" id="recKeyModel" placeholder="0"></div>
+                <div class="form-group"><label>配件销售额（¥）</label><input type="number" id="recAccessory" placeholder="0"></div>
+                <div class="form-group"><label>回收台量</label><input type="number" id="recTradeIn" placeholder="0"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" style="background:var(--gray-200); color:var(--gray-700); padding:10px 20px;" onclick="closeRecordModal()">取消</button>
+            <button class="btn btn-primary" style="width:auto; padding:10px 20px;" onclick="submitRecord()">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 目标设置弹窗 -->
+<div class="modal-overlay" id="targetModal" style="display:none;">
+    <div class="modal-box" style="width:700px; max-height:80vh;">
+        <div class="modal-header">
+            <h3>设置月度目标</h3>
+            <button class="modal-close" onclick="closeTargetModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="overflow-y:auto; max-height:60vh;">
+            <p style="font-size:13px; color:var(--gray-500); margin-bottom:16px;">批量设置所有门店的月度目标，保存后立即生效。</p>
+            <table class="data-table" id="targetTable">
+                <thead><tr><th>门店</th><th>等级</th><th>手机销售目标</th><th>NCME目标</th><th>重点机型目标</th><th>配件目标</th><th>回收占比</th></tr></thead>
+                <tbody id="targetBody"></tbody>
+            </table>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" style="background:var(--gray-200); color:var(--gray-700); padding:10px 20px;" onclick="closeTargetModal()">取消</button>
+            <button class="btn btn-primary" style="width:auto; padding:10px 20px;" onclick="saveTargets()">保存所有目标</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+const now = new Date();
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.init()) return;
+    App.renderSidebar('sales');
+    App.renderTopbar('销售进度');
+
+    const isAdmin = App.user?.role === 'admin';
+    const picker = document.getElementById('monthPicker');
+    picker.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    if (isAdmin) {
+        document.getElementById('actionBtns').innerHTML = `
+            <button class="btn btn-primary" style="padding:8px 16px; font-size:13px;" onclick="openRecordModal()">📝 录入</button>
+            <button class="btn" style="padding:8px 16px; font-size:13px; background:var(--primary-bg); color:var(--primary);" onclick="openTargetModal()">🎯 目标</button>
+            <button class="btn-export" onclick="exportExcel()">📥 Excel</button>
+            <button class="btn-export" onclick="exportCSV()">📄 CSV</button>
+        `;
+    } else {
+        document.getElementById('actionBtns').innerHTML = `
+            <button class="btn-export" onclick="exportExcel()">📥 Excel</button>
+            <button class="btn-export" onclick="exportCSV()">📄 CSV</button>
+        `;
+    }
+
+    await loadData();
+});
+
+async function loadData() {
+    const [y, m] = document.getElementById('monthPicker').value.split('-').map(Number);
+    try {
+        const data = await App.api(`/sales/monthly?year=${y}&month=${m}&token=${App.token}`);
+        // 如果当前月无数据且不是用户主动选择，自动切到有数据的最近月份
+        const hasAnyData = (data.stores || []).some(s => s.phone_sales_done > 0 || s.phone_qty_done > 0 || s.ncme_done > 0);
+        if (!hasAnyData && !loadData._userTriggered) {
+            const latest = await App.api(`/sales/latest-month?token=${App.token}`);
+            if (latest && latest.year && latest.month) {
+                const picker = document.getElementById('monthPicker');
+                picker.value = `${latest.year}-${String(latest.month).padStart(2, '0')}`;
+                const data2 = await App.api(`/sales/monthly?year=${latest.year}&month=${latest.month}&token=${App.token}`);
+                renderSourceInfo(data2);
+                renderSummary(data2);
+                renderReport(data2);
+                await renderTrend(latest.year, latest.month);
+                document.getElementById('updateTime').textContent = `数据更新至 ${new Date().toLocaleTimeString('zh-CN')}`;
+                return;
+            }
+        }
+        loadData._userTriggered = false;
+        renderSourceInfo(data);
+        renderSummary(data);
+        renderReport(data);
+        await renderTrend(y, m);
+        document.getElementById('updateTime').textContent = `数据更新至 ${new Date().toLocaleTimeString('zh-CN')}`;
+    } catch(e) { console.error(e); }
+}
+
+// 用户手动切换月份时标记
+document.getElementById('monthPicker').addEventListener('change', () => { loadData._userTriggered = true; loadData(); });
+
+function renderSourceInfo(data) {
+    const stats = data.source_stats || {};
+    const eboss = stats.eboss || {records: 0, days: 0};
+    const dingtalk = stats.dingtalk || {records: 0, days: 0};
+    const manual = stats.manual || {records: 0, days: 0};
+
+    let badges = '';
+    if (eboss.records > 0) {
+        badges += `<span class="source-badge eboss">🟢 eBoss · ${eboss.records}条 · ${eboss.days}天</span>`;
+    }
+    if (dingtalk.records > 0) {
+        badges += `<span class="source-badge manual">🔵 钉钉 · ${dingtalk.records}条</span>`;
+    }
+    if (manual.records > 0) {
+        badges += `<span class="source-badge manual">✏️ 手动 · ${manual.records}条</span>`;
+    }
+    if (!badges) {
+        badges = `<span style="font-size:13px; color:var(--gray-400);">暂无数据</span>`;
+    }
+    document.getElementById('sourceInfo').innerHTML = badges;
+}
+
+function renderSummary(data) {
+    const stores = data.stores || [];
+    let tPhoneTarget=0, tPhoneDone=0, tQty=0, tNcme=0, tAcc=0, tTradeIn=0;
+    stores.forEach(s => {
+        tPhoneTarget += s.phone_sales_target;
+        tPhoneDone += s.phone_sales_done;
+        tQty += s.phone_qty_done;
+        tNcme += s.ncme_done;
+        tAcc += s.accessory_done;
+        tTradeIn += s.trade_in_done;
+    });
+    const rate = tPhoneTarget > 0 ? Math.round(tPhoneDone / tPhoneTarget * 1000) / 10 : 0;
+
+    document.getElementById('summaryCards').innerHTML = `
+        <div class="stat-card">
+            <div class="stat-icon blue">💰</div>
+            <div class="stat-info"><h4>${App.formatPrice(tPhoneDone)}</h4><p>手机销售（完成${rate}%）</p></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon green">📱</div>
+            <div class="stat-info"><h4>${tQty}</h4><p>手机台量</p></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon orange">📋</div>
+            <div class="stat-info"><h4>${App.formatPrice(tNcme)}</h4><p>NCME销售</p></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon purple">♻️</div>
+            <div class="stat-info"><h4>${tTradeIn}</h4><p>回收台量</p></div>
+        </div>
+    `;
+}
+
+function rateHtml(done, target) {
+    const rate = target > 0 ? Math.round(done / target * 1000) / 10 : 0;
+    const cls = rate >= 80 ? 'green' : rate >= 50 ? 'yellow' : rate > 0 ? 'red' : '';
+    return `<div class="rate-bar">
+        <div class="mini-bar"><div class="fill ${cls}" style="width:${Math.min(rate,100)}%"></div></div>
+        <span class="rate-text">${rate}%</span>
+    </div>`;
+}
+
+function renderReport(data) {
+    const stores = data.stores || [];
+    const T = {pt:0,pd:0,nt:0,nd:0,qty:0,kt:0,kd:0,at:0,ad:0,ti:0};
+
+    let rows = stores.map(s => {
+        T.pt+=s.phone_sales_target; T.pd+=s.phone_sales_done;
+        T.nt+=s.ncme_target; T.nd+=s.ncme_done;
+        T.qty+=s.phone_qty_done; T.kt+=s.key_model_target; T.kd+=s.key_model_done;
+        T.at+=s.accessory_target; T.ad+=s.accessory_done; T.ti+=s.trade_in_done;
+
+        const shortName = s.store_name.replace(/三星授权体验店|三星授权旗舰店|三星专卖店/g, '').trim();
+        const tiRate = s.phone_qty_done > 0 ? Math.round(s.trade_in_done / s.phone_qty_done * 1000) / 10 : 0;
+
+        return `<tr class="store-detail-row">
+            <td><span class="badge-tag info">${s.grade||'--'}</span></td>
+            <td>${shortName}</td>
+            <td>${App.formatPrice(s.phone_sales_target)}</td>
+            <td style="font-weight:600;">${App.formatPrice(s.phone_sales_done)}</td>
+            <td class="rate-cell">${rateHtml(s.phone_sales_done, s.phone_sales_target)}</td>
+            <td>${App.formatPrice(s.ncme_target)}</td>
+            <td style="font-weight:600;">${App.formatPrice(s.ncme_done)}</td>
+            <td class="rate-cell">${rateHtml(s.ncme_done, s.ncme_target)}</td>
+            <td style="text-align:center;">${s.phone_qty_done}</td>
+            <td>${s.key_model_target||'--'}</td>
+            <td style="font-weight:600;">${s.key_model_done}</td>
+            <td class="rate-cell">${rateHtml(s.key_model_done, s.key_model_target)}</td>
+            <td>${App.formatPrice(s.accessory_target)}</td>
+            <td style="font-weight:600;">${App.formatPrice(s.accessory_done)}</td>
+            <td class="rate-cell">${rateHtml(s.accessory_done, s.accessory_target)}</td>
+            <td style="text-align:center;">${s.trade_in_done}</td>
+            <td class="rate-cell"><span class="rate-text">${tiRate}%</span></td>
+        </tr>`;
+    }).join('');
+
+    // 合计行
+    const tiRate = T.qty > 0 ? Math.round(T.ti / T.qty * 1000) / 10 : 0;
+    rows += `<tr class="total-row">
+        <td></td><td>合计</td>
+        <td>${App.formatPrice(T.pt)}</td><td style="font-weight:700;">${App.formatPrice(T.pd)}</td>
+        <td class="rate-cell">${rateHtml(T.pd, T.pt)}</td>
+        <td>${App.formatPrice(T.nt)}</td><td style="font-weight:700;">${App.formatPrice(T.nd)}</td>
+        <td class="rate-cell">${rateHtml(T.nd, T.nt)}</td>
+        <td style="text-align:center;">${T.qty}</td>
+        <td>${T.kt||'--'}</td><td style="font-weight:700;">${T.kd}</td>
+        <td class="rate-cell">${rateHtml(T.kd, T.kt)}</td>
+        <td>${App.formatPrice(T.at)}</td><td style="font-weight:700;">${App.formatPrice(T.ad)}</td>
+        <td class="rate-cell">${rateHtml(T.ad, T.at)}</td>
+        <td style="text-align:center;">${T.ti}</td>
+        <td class="rate-cell"><span class="rate-text">${tiRate}%</span></td>
+    </tr>`;
+
+    document.getElementById('reportBody').innerHTML = rows;
+}
+
+async function renderTrend(y, m) {
+    try {
+        const data = await App.api(`/sales/daily-trend?year=${y}&month=${m}&token=${App.token}`);
+        if (!data.length) {
+            document.getElementById('dailyChart').parentElement.innerHTML = '<p style="color:var(--gray-400); text-align:center; padding:40px;">暂无趋势数据</p>';
+            return;
+        }
+        const ctx = document.getElementById('dailyChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.map(d => d.date.substring(8)),
+                datasets: [{
+                    label: '手机销售额', data: data.map(d => d.sales),
+                    backgroundColor: 'rgba(20,40,160,.7)', borderRadius: 4, yAxisID: 'y'
+                }, {
+                    label: 'NCME', data: data.map(d => d.ncme || 0),
+                    backgroundColor: 'rgba(255,107,53,.5)', borderRadius: 4, yAxisID: 'y'
+                }, {
+                    label: '台量', data: data.map(d => d.qty),
+                    type: 'line', borderColor: '#10b981', tension: 0.4,
+                    pointRadius: 3, yAxisID: 'y1'
+                }]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { position: 'bottom' } },
+                scales: {
+                    y: { beginAtZero: true, position: 'left', title: { display: true, text: '销售额（元）' } },
+                    y1: { beginAtZero: true, position: 'right', title: { display: true, text: '台量' }, grid: { display: false } }
+                }
+            }
+        });
+    } catch(e) {
+        document.getElementById('dailyChart').parentElement.innerHTML = '<p style="color:var(--gray-400); text-align:center; padding:40px;">加载失败</p>';
+    }
+}
+
+function exportExcel() {
+    const [y, m] = document.getElementById('monthPicker').value.split('-').map(Number);
+    const token = App.token;
+    const url = `/sales/export?year=${y}&month=${m}&token=${token}`;
+    window.open(url, '_blank');
+    App.toast('正在生成Excel...', 'success');
+}
+
+function exportCSV() {
+    const [y, m] = document.getElementById('monthPicker').value.split('-').map(Number);
+    const token = App.token;
+    const url = `/sales/export-csv?year=${y}&month=${m}&token=${token}`;
+    window.open(url, '_blank');
+    App.toast('正在下载CSV...', 'success');
+}
+
+/* ===== View Switching ===== */
+let currentView = 'report';
+let currentCompareType = 'mom';
+
+function switchView(view) {
+    currentView = view;
+    document.querySelectorAll('.view-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#viewReport, #viewCompare, #viewRanking').forEach(d => d.style.display = 'none');
+    if (view === 'report') {
+        document.querySelector('.view-tab:first-child').classList.add('active');
+        document.getElementById('viewReport').style.display = '';
+    } else if (view === 'compare') {
+        document.querySelectorAll('.view-tab')[1].classList.add('active');
+        document.getElementById('viewCompare').style.display = '';
+        loadCompare();
+    } else if (view === 'ranking') {
+        document.querySelectorAll('.view-tab')[2].classList.add('active');
+        document.getElementById('viewRanking').style.display = '';
+        loadRanking();
+    }
+}
+
+function switchCompare(type) {
+    currentCompareType = type;
+    document.getElementById('btnCompareMom').style.cssText = type === 'mom' ? 'padding:6px 14px; font-size:12px; background:var(--primary); color:#fff; border:none; border-radius:var(--radius);' : 'padding:6px 14px; font-size:12px; border:1px solid var(--gray-200); border-radius:var(--radius);';
+    document.getElementById('btnCompareYoy').style.cssText = type === 'yoy' ? 'padding:6px 14px; font-size:12px; background:var(--primary); color:#fff; border:none; border-radius:var(--radius);' : 'padding:6px 14px; font-size:12px; border:1px solid var(--gray-200); border-radius:var(--radius);';
+    loadCompare();
+}
+
+async function loadCompare() {
+    const [y, m] = document.getElementById('monthPicker').value.split('-').map(Number);
+    try {
+        const data = await App.api(`/sales/compare?year=${y}&month=${m}&compare_type=${currentCompareType}&token=${App.token}`);
+        const stores = data.stores || [];
+        const totals = data.totals || {};
+
+        // Cards
+        let cards = stores.map(s => {
+            const cs = s.change;
+            const up = v => v > 0 ? 'change-up' : v < 0 ? 'change-down' : 'change-neutral';
+            const arrow = v => v > 0 ? '↑' : v < 0 ? '↓' : '→';
+            return `<div class="compare-card">
+                <div class="store-name">${s.store_name}</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:8px; font-size:12px;">
+                    <div><span style="color:var(--gray-400);">手机销售额</span><br>
+                        <strong>${App.formatPrice(s.current.phone_sales)}</strong>
+                        <span class="${up(cs.phone_sales_pct)}"> ${arrow(cs.phone_sales_pct)}${Math.abs(cs.phone_sales_pct)}%</span>
+                    </div>
+                    <div><span style="color:var(--gray-400);">NCME</span><br>
+                        <strong>${App.formatPrice(s.current.ncme_sales)}</strong>
+                        <span class="${up(cs.ncme_pct)}"> ${arrow(cs.ncme_pct)}${Math.abs(cs.ncme_pct)}%</span>
+                    </div>
+                    <div><span style="color:var(--gray-400);">手机台量</span><br>
+                        <strong>${s.current.phone_qty}台</strong>
+                        <span class="${up(cs.phone_qty_pct)}"> ${arrow(cs.phone_qty_pct)}${Math.abs(cs.phone_qty_pct)}%</span>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+        document.getElementById('compareCards').innerHTML = cards;
+
+        // Summary
+        const tc = totals.change_pct || {};
+        const label = currentCompareType === 'mom' ? '环比上月' : '同比去年';
+        document.getElementById('compareSummary').innerHTML = `
+            <strong>📊 全渠道${label}：</strong>
+            手机销售额 ${App.formatPrice(totals.current.phone_sales)} 
+            <span class="${tc.phone_sales > 0 ? 'change-up' : tc.phone_sales < 0 ? 'change-down' : ''}">
+                ${tc.phone_sales > 0 ? '↑' : '↓'}${Math.abs(tc.phone_sales)}%
+            </span>
+            &nbsp;|&nbsp; 手机台量 ${totals.current.phone_qty}台
+            <span class="${tc.phone_qty > 0 ? 'change-up' : tc.phone_qty < 0 ? 'change-down' : ''}">
+                ${tc.phone_qty > 0 ? '↑' : '↓'}${Math.abs(tc.phone_qty)}%
+            </span>
+        `;
+
+        // Chart
+        const ctx = document.getElementById('compareChart');
+        if (ctx._chart) ctx._chart.destroy();
+        ctx._chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: stores.map(s => s.store_name.replace(/三星.*/g, '').trim()),
+                datasets: [
+                    { label: '当月', data: stores.map(s => s.current.phone_sales), backgroundColor: 'rgba(20,40,160,.7)', borderRadius: 4 },
+                    { label: '对比月', data: stores.map(s => s.compare.phone_sales), backgroundColor: 'rgba(160,180,220,.5)', borderRadius: 4 }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom' } },
+                scales: { y: { beginAtZero: true, title: { display: true, text: '手机销售额（元）' } } }
+            }
+        });
+    } catch(e) { console.error(e); }
+}
+
+async function loadRanking() {
+    const [y, m] = document.getElementById('monthPicker').value.split('-').map(Number);
+    const metric = document.getElementById('rankMetric').value;
+    try {
+        const data = await App.api(`/sales/ranking?year=${y}&month=${m}&metric=${metric}&token=${App.token}`);
+        const stores = data.stores || [];
+        let html = stores.map(s => `
+            <div class="ranking-row">
+                <span class="ranking-medal">${s.medal || s.rank}</span>
+                <span class="ranking-num ${s.rank <= 3 ? 'top' : 'normal'}">${s.rank}</span>
+                <span style="flex:1; font-weight:500;">${s.store_name}</span>
+                <span style="color:var(--gray-400); font-size:12px;">${s.province || ''}</span>
+                <span style="min-width:80px; text-align:right; font-weight:600;">
+                    ${metric.includes('rate') ? s[metric] + '%' : metric === 'phone_sales' ? App.formatPrice(s[metric]) : s[metric]}
+                </span>
+            </div>
+        `).join('');
+        document.getElementById('rankingBody').innerHTML = html || '<p style="text-align:center; color:var(--gray-400); padding:40px;">暂无数据</p>';
+    } catch(e) { console.error(e); }
+}
+
+/* ===== 录入弹窗 ===== */
+async function openRecordModal() {
+    const stores = await App.api(`/sales/stores?token=${App.token}`);
+    const sel = document.getElementById('recStore');
+    sel.innerHTML = stores.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    document.getElementById('recDate').value = now.toISOString().substring(0, 10);
+    ['recPhoneSales','recNcme','recQty','recKeyModel','recAccessory','recTradeIn'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('recordModal').style.display = 'flex';
+}
+
+function closeRecordModal() { document.getElementById('recordModal').style.display = 'none'; }
+
+async function submitRecord() {
+    const records = [{
+        store_id: parseInt(document.getElementById('recStore').value),
+        date: document.getElementById('recDate').value,
+        phone_sales: parseFloat(document.getElementById('recPhoneSales').value) || 0,
+        ncme_sales: parseFloat(document.getElementById('recNcme').value) || 0,
+        phone_qty: parseInt(document.getElementById('recQty').value) || 0,
+        key_model_qty: parseInt(document.getElementById('recKeyModel').value) || 0,
+        accessory_sales: parseFloat(document.getElementById('recAccessory').value) || 0,
+        trade_in_qty: parseInt(document.getElementById('recTradeIn').value) || 0,
+    }];
+    try {
+        await App.api(`/sales/record?token=${App.token}`, { method: 'POST', body: records });
+        App.toast('销售数据已保存', 'success');
+        closeRecordModal();
+        await loadData();
+    } catch(e) { App.toast('保存失败: ' + e.message, 'error'); }
+}
+
+/* ===== 目标设置弹窗 ===== */
+async function openTargetModal() {
+    const [y, m] = document.getElementById('monthPicker').value.split('-').map(Number);
+    const stores = await App.api(`/sales/stores?token=${App.token}`);
+    let targets = {};
+    try {
+        const existing = await App.api(`/sales/targets?year=${y}&month=${m}&token=${App.token}`);
+        existing.forEach(t => { targets[t.store_id] = t; });
+    } catch(e) {}
+
+    document.getElementById('targetBody').innerHTML = stores.map(s => {
+        const t = targets[s.id] || {};
+        return `<tr>
+            <td style="font-weight:500;">${s.name.replace(/三星授权体验店|三星授权旗舰店|三星专卖店/g, '')}</td>
+            <td><input type="text" value="${t.grade || ''}" style="width:40px; padding:4px 8px; border:1px solid var(--gray-200); border-radius:4px; text-align:center;" class="target-grade" data-sid="${s.id}"></td>
+            <td><input type="number" value="${t.phone_sales_target || 0}" style="width:100px; padding:6px 8px; border:1px solid var(--gray-200); border-radius:4px;" class="target-phone" data-sid="${s.id}"></td>
+            <td><input type="number" value="${t.ncme_target || 0}" style="width:100px; padding:6px 8px; border:1px solid var(--gray-200); border-radius:4px;" class="target-ncme" data-sid="${s.id}"></td>
+            <td><input type="number" value="${t.key_model_target || 0}" style="width:80px; padding:6px 8px; border:1px solid var(--gray-200); border-radius:4px;" class="target-keymodel" data-sid="${s.id}"></td>
+            <td><input type="number" value="${t.accessory_target || 0}" style="width:100px; padding:6px 8px; border:1px solid var(--gray-200); border-radius:4px;" class="target-acc" data-sid="${s.id}"></td>
+            <td><input type="number" value="${t.trade_in_rate || 0}" step="0.01" style="width:60px; padding:6px 8px; border:1px solid var(--gray-200); border-radius:4px;" class="target-tir" data-sid="${s.id}"></td>
+        </tr>`;
+    }).join('');
+    document.getElementById('targetModal').style.display = 'flex';
+}
+
+function closeTargetModal() { document.getElementById('targetModal').style.display = 'none'; }
+
+async function saveTargets() {
+    const [y, m] = document.getElementById('monthPicker').value.split('-').map(Number);
+    const rows = document.querySelectorAll('#targetBody tr');
+    const targets = [];
+    rows.forEach(row => {
+        const sid = row.querySelector('.target-phone')?.dataset.sid;
+        if (!sid) return;
+        targets.push({
+            store_id: parseInt(sid), year: y, month: m,
+            grade: row.querySelector('.target-grade')?.value || '',
+            phone_sales_target: parseFloat(row.querySelector('.target-phone')?.value) || 0,
+            ncme_target: parseFloat(row.querySelector('.target-ncme')?.value) || 0,
+            key_model_target: parseInt(row.querySelector('.target-keymodel')?.value) || 0,
+            accessory_target: parseFloat(row.querySelector('.target-acc')?.value) || 0,
+            trade_in_rate: parseFloat(row.querySelector('.target-tir')?.value) || 0,
+        });
+    });
+    try {
+        await App.api(`/sales/targets?token=${App.token}`, { method: 'POST', body: targets });
+        App.toast('月度目标已保存', 'success');
+        closeTargetModal();
+        await loadData();
+    } catch(e) { App.toast('保存失败: ' + e.message, 'error'); }
+}
+</script>
+<script src="/js/ai-assistant.js?v=3.0"></script>
+</body>
+</html>

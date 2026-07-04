@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1428a0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="三星管理">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <title>店员提成 - 三星事业部</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        /* 仅补充 staff 特有样式，不覆盖全局 */
+        .view-tabs { display: flex; gap: 0; margin: 16px 0 0; border-bottom: 2px solid var(--gray-200); }
+        .view-tab { padding: 10px 20px; font-size: 14px; font-weight: 500; cursor: pointer; color: var(--gray-500); border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .2s; background: none; border-top: none; border-left: none; border-right: none; }
+        .view-tab:hover { color: var(--primary); }
+        .view-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .comm-amount { color: var(--comm-green); font-weight: 700; }
+        .comm-green  { color: var(--comm-green); }
+        .comm-gold   { color: var(--comm-gold); }
+        .comm-purple { color: var(--comm-purple); }
+        .progress-bar-mini {
+            width: 60px; height: 5px; background: var(--gray-200); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 6px;
+        }
+        .progress-bar-mini .fill { height: 100%; border-radius: 3px; }
+        .fill-green  { background: var(--comm-green); }
+        .fill-gold   { background: var(--comm-gold); }
+        .fill-blue   { background: var(--primary); }
+        .donut-wrap { width: 200px; margin: 0 auto 12px; }
+        .donut-legend { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 8px; }
+        .donut-legend span { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--gray-500); }
+        .donut-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .rank-row { display: flex; align-items: center; padding: 8px 12px; gap: 10px; border-bottom: 1px solid var(--gray-100); }
+        .rank-row:last-child { border-bottom: none; }
+        .rank-row:hover { background: var(--primary-bg); }
+        .rank-num { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
+        .rank-num.top1 { background: #fef3c7; color: #b45309; }
+        .rank-num.top2 { background: #f1f5f9; color: #64748b; }
+        .rank-num.top3 { background: #fef3c7; color: #b45309; }
+        .rank-num.normal { background: var(--gray-100); color: var(--gray-500); }
+        .detail-label { font-size: 12px; color: var(--gray-500); margin-bottom: 2px; }
+        .detail-value { font-size: 18px; font-weight: 700; }
+        /* 弹窗 */
+        .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; align-items:center; justify-content:center; }
+        .modal-overlay.show { display:flex; }
+        .modal { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow-lg); padding:28px; max-width:680px; width:94%; max-height:85vh; overflow-y:auto; position:relative; }
+        .modal-close { position:absolute; top:12px; right:16px; background:none; border:none; font-size:22px; color:var(--gray-400); cursor:pointer; padding:4px 8px; border-radius:4px; }
+        .modal-close:hover { background:var(--gray-100); color:var(--gray-700); }
+        @media (max-width:768px) {
+            .donut-wrap { width: 160px; }
+            .detail-value { font-size: 15px; }
+        }
+    </style>
+</head>
+<body>
+<div class="app-layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main-content">
+        <div class="topbar" id="topbar"></div>
+        <div class="page-content">
+
+            <!-- 统计卡片 -->
+            <div class="stats-grid" style="margin-bottom:20px;">
+                <div class="card" style="text-align:center;">
+                    <div class="card-body" style="padding:20px;">
+                        <div class="detail-label">👥 店员总数</div>
+                        <div class="detail-value" id="statStaff">-</div>
+                    </div>
+                </div>
+                <div class="card" style="text-align:center;">
+                    <div class="card-body" style="padding:20px;">
+                        <div class="detail-label">📱 本月手机销量</div>
+                        <div class="detail-value" id="statQty">-</div>
+                    </div>
+                </div>
+                <div class="card" style="text-align:center;">
+                    <div class="card-body" style="padding:20px;">
+                        <div class="detail-label">💰 本月销售额</div>
+                        <div class="detail-value" id="statSales">-</div>
+                    </div>
+                </div>
+                <div class="card" style="text-align:center;">
+                    <div class="card-body" style="padding:20px;">
+                        <div class="detail-label">💵 本月提成总额</div>
+                        <div class="detail-value comm-amount" id="statComm">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 栏 -->
+            <div class="view-tabs" style="margin-bottom:0;">
+                <button class="view-tab active" data-tab="list">👥 店员列表</button>
+                <button class="view-tab" data-tab="commission">📊 提成概览</button>
+                <button class="view-tab" data-tab="ranking">🏆 销售排行</button>
+                <button class="view-tab" data-tab="rules">📐 提成规则</button>
+                <button class="view-tab" data-tab="activities">📋 活动政策</button>
+            </div>
+
+            <!-- Tab: 店员列表 -->
+            <div class="tab-panel" id="panel-list">
+                <div class="card" style="margin-top:0; border-top-left-radius:0;">
+                    <div class="card-header">
+                        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                            <select id="storeFilter" style="width:auto;min-width:140px;padding:7px 10px;font-size:13px;border:1.5px solid var(--gray-200);border-radius:6px;" onchange="loadStaffList()">
+                                <option value="">全部门店</option>
+                            </select>
+                            <select id="monthFilter" style="width:auto;min-width:120px;padding:7px 10px;font-size:13px;border:1.5px solid var(--gray-200);border-radius:6px;" onchange="loadStaffList()">
+                            </select>
+                        </div>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn-export" onclick="syncDaily()">🔄 同步数据</button>
+                            <button class="btn-export" onclick="showAddStaff()" style="background:var(--primary);color:#fff;border-color:var(--primary);">+ 新增店员</button>
+                        </div>
+                    </div>
+                    <div class="card-body" style="padding:0; overflow-x:auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>姓名</th><th>门店</th><th>岗位</th>
+                                    <th style="text-align:right;">底薪</th>
+                                    <th style="text-align:right;">手机销量</th>
+                                    <th style="text-align:right;">W26</th>
+                                    <th style="text-align:right;">销售额</th>
+                                    <th style="text-align:right;">提成</th>
+                                    <th style="text-align:right;">预计月入</th>
+                                    <th style="text-align:center;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="staffTbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: 提成概览 -->
+            <div class="tab-panel" id="panel-commission" style="display:none;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                    <div class="card">
+                        <div class="card-header"><h3>📊 提成结构分布</h3></div>
+                        <div class="card-body" style="text-align:center;">
+                            <div class="donut-wrap"><canvas id="commDonut"></canvas></div>
+                            <div class="donut-legend" id="donutLegend"></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><h3>🏪 门店提成排行</h3></div>
+                        <div class="card-body" id="storeCommRanking" style="padding:0;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: 排行 -->
+            <div class="tab-panel" id="panel-ranking" style="display:none;">
+                <div class="card">
+                    <div class="card-body" style="padding:0; overflow-x:auto;" id="rankingContent"></div>
+                </div>
+            </div>
+
+            <!-- Tab: 规则 -->
+            <div class="tab-panel" id="panel-rules" style="display:none;">
+                <div class="card">
+                    <div class="card-body" style="padding:0; overflow-x:auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>规则名称</th><th>类型</th><th>适用机型</th><th>提成方式</th><th style="text-align:right;">金额/比例</th></tr>
+                            </thead>
+                            <tbody id="rulesTbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: 活动政策 -->
+            <div class="tab-panel" id="panel-activities" style="display:none;" >
+                <div id="activitiesContent"></div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ====== 店员详情弹窗 ====== -->
+<div class="modal-overlay" id="detailModal">
+    <div class="modal">
+        <button class="modal-close" onclick="closeDetailModal()">✕</button>
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--gray-800);" id="detailTitle"></h3>
+        <div id="detailContent"></div>
+    </div>
+</div>
+
+<!-- ====== 新增店员弹窗 ====== -->
+<div class="modal-overlay" id="addModal">
+    <div class="modal">
+        <button class="modal-close" onclick="closeAddModal()">✕</button>
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--gray-800);">新增店员</h3>
+        <form id="addForm" onsubmit="submitAddStaff(event)">
+            <div class="form-group" style="margin-bottom:12px;">
+                <label style="display:block;font-size:13px;color:var(--gray-500);margin-bottom:4px;">姓名 *</label>
+                <input id="addName" required style="width:100%;padding:8px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:14px;">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label style="display:block;font-size:13px;color:var(--gray-500);margin-bottom:4px;">门店 *</label>
+                <select id="addStore" required style="width:100%;padding:8px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:14px;"></select>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label style="display:block;font-size:13px;color:var(--gray-500);margin-bottom:4px;">岗位</label>
+                <select id="addPos" style="width:100%;padding:8px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:14px;">
+                    <option>店员</option><option>店长</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label style="display:block;font-size:13px;color:var(--gray-500);margin-bottom:4px;">电话</label>
+                <input id="addPhone" style="width:100%;padding:8px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:14px;">
+            </div>
+            <div class="form-group" style="margin-bottom:16px;">
+                <label style="display:block;font-size:13px;color:var(--gray-500);margin-bottom:4px;">底薪</label>
+                <input id="addSalary" type="number" value="3000" style="width:100%;padding:8px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:14px;">
+            </div>
+            <button type="submit" class="btn-export" style="width:100%;background:var(--primary);color:#fff;border-color:var(--primary);padding:10px;font-size:15px;">确认添加</button>
+        </form>
+    </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+// ── 主题色变量 ──
+document.documentElement.style.setProperty('--comm-green','#059669');
+document.documentElement.style.setProperty('--comm-gold','#d97706');
+document.documentElement.style.setProperty('--comm-purple','#7c3aed');
+
+// ── Init ──
+if (!App.init()) throw new Error('Auth required');
+App.renderSidebar('staff');
+App.renderTopbar('店员提成');
+
+const currentMonth = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+})();
+
+// ── Tab 切换 ──
+document.querySelectorAll('.view-tab').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.view-tab').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        const tab = this.dataset.tab;
+        document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+        document.getElementById('panel-' + tab).style.display = '';
+        if (tab === 'ranking')   loadRanking();
+        if (tab === 'rules')     loadRules();
+        if (tab === 'activities') loadActivities();
+        if (tab === 'commission') loadCommissionOverview();
+    });
+});
+
+// ── 月份选择器 ──
+function initMonthFilter() {
+    const sel = document.getElementById('monthFilter');
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const v = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        sel.innerHTML += `<option value="${v}" ${v===currentMonth?'selected':''}>${v}</option>`;
+    }
+}
+
+// ── 门店选择器 ──
+async function initStoreFilter() {
+    try {
+        const stores = await App.api('auth/stores');
+        const sel = document.getElementById('storeFilter');
+        stores.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.name; sel.appendChild(o); });
+        const as = document.getElementById('addStore');
+        stores.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.name; as.appendChild(o); });
+    } catch(e) { console.error(e); }
+}
+
+// ── 店员列表 ──
+async function loadStaffList() {
+    const month = document.getElementById('monthFilter').value || currentMonth;
+    const storeId = document.getElementById('storeFilter').value;
+    let url = '/staff/list';
+    if (storeId) url += '?store_id=' + storeId;
+    try {
+        const staff = await App.api(url);
+        let totalQty = 0, totalSales = 0, totalComm = 0;
+        const rows = [];
+        for (const s of staff) {
+            const detail = await App.api(`/staff/${s.id}?month=${month}`);
+            const sales = detail.sales || {};
+            const pq = sales.phone_qty || 0;
+            const ps = sales.phone_sales || 0;
+            const km = sales.key_model_qty || 0;
+            const comm = sales.commission || 0;
+            const income = detail.estimated_income || s.base_salary || 0;
+            totalQty += pq; totalSales += ps; totalComm += comm;
+            const isMgr = s.position === '店长';
+            rows.push(`<tr>
+                <td><strong>${s.name}</strong></td>
+                <td>${s.store_name||''}</td>
+                <td><span class="badge-tag ${isMgr?'warning':'success'}">${s.position}</span></td>
+                <td style="text-align:right;">¥${(s.base_salary||0).toLocaleString()}</td>
+                <td style="text-align:right;font-weight:600;">${pq}</td>
+                <td style="text-align:right;">${km}</td>
+                <td style="text-align:right;">¥${ps.toLocaleString()}</td>
+                <td style="text-align:right;" class="comm-amount">¥${comm.toLocaleString()}</td>
+                <td style="text-align:right;font-weight:600;">¥${income.toLocaleString()}</td>
+                <td style="text-align:center;"><button class="btn-export" onclick="showDetail(${s.id},'${month}')" style="font-size:12px;padding:4px 10px;">详情</button></td>
+            </tr>`);
+        }
+        document.getElementById('staffTbody').innerHTML = rows.join('') ||
+            '<tr><td colspan="10" style="text-align:center;color:var(--gray-400);padding:32px;">暂无店员数据</td></tr>';
+        document.getElementById('statStaff').textContent = staff.length;
+        document.getElementById('statQty').textContent = totalQty;
+        document.getElementById('statSales').textContent = '¥' + totalSales.toLocaleString();
+        document.getElementById('statComm').textContent = '¥' + totalComm.toLocaleString();
+    } catch(e) {
+        console.error(e);
+        document.getElementById('staffTbody').innerHTML =
+            '<tr><td colspan="10" style="text-align:center;color:var(--danger);padding:32px;">加载失败，请重试</td></tr>';
+    }
+}
+
+// ── 店员详情弹窗 ──
+async function showDetail(id, month) {
+    try {
+        const d = await App.api(`/staff/${id}?month=${month}`);
+        const s = d.sales || {};
+        const t = d.target || {};
+        const cd = d.commission_detail || {};
+        const phoneProgress = t.phone_qty_target ? Math.min(100, (s.phone_qty||0)/t.phone_qty_target*100) : 0;
+        document.getElementById('detailTitle').textContent = d.name + ' - 业绩详情';
+        document.getElementById('detailContent').innerHTML = `
+            <div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span class="badge-tag success">${d.store_name}</span>
+                <span class="badge-tag ${d.position==='店长'?'warning':'success'}">${d.position}</span>
+                <span style="font-size:13px;color:var(--gray-500);">底薪 ¥${(d.base_salary||0).toLocaleString()}</span>
+            </div>
+            <div class="stats-grid" style="margin-bottom:20px;">
+                <div class="card" style="text-align:center;">
+                    <div class="card-body" style="padding:16px;">
+                        <div class="detail-label">📱 手机销量</div>
+                        <div class="detail-value">${s.phone_qty||0} 台</div>
+                        <div style="margin-top:6px;display:flex;align-items:center;justify-content:center;gap:6px;">
+                            <div class="progress-bar-mini" style="width:80px;"><div class="fill fill-green" style="width:${phoneProgress}%;"></div></div>
+                            <span style="font-size:12px;color:var(--gray-500);">目标${t.phone_qty_target||0}台 (${Math.round(phoneProgress)}%)</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card" style="text-align:center;">
+                    <div class="card-body" style="padding:16px;">
+                        <div class="detail-label">💰 本月提成</div>
+                        <div class="detail-value comm-amount">¥${(cd.total||0).toLocaleString()}</div>
+                    </div>
+                </div>
+                <div class="card" style="text-align:center;">
+                    <div class="card-body" style="padding:16px;">
+                        <div class="detail-label">📊 预计月收入</div>
+                        <div class="detail-value comm-amount">¥${(d.estimated_income||0).toLocaleString()}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="margin-bottom:16px;">
+                <div class="card-header"><h3>💵 提成明细</h3></div>
+                <div class="card-body" style="padding:0;">
+                    ${(cd.breakdown||[]).length ? cd.breakdown.map(b => `
+                        <div class="rank-row"><span style="flex:1;">${b.rule_name}</span><span class="comm-amount">¥${b.amount.toLocaleString()}</span></div>
+                    `).join('') : '<div style="padding:20px;text-align:center;color:var(--gray-400);">暂无提成数据</div>'}
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><h3>📊 销售明细</h3></div>
+                <div class="card-body" style="padding:16px;">
+                    <div class="stats-grid">
+                        <div style="text-align:center;padding:12px;background:var(--gray-50);border-radius:var(--radius);">
+                            <div class="detail-value">¥${(s.phone_sales||0).toLocaleString()}</div>
+                            <div class="detail-label">手机销售额</div>
+                        </div>
+                        <div style="text-align:center;padding:12px;background:var(--gray-50);border-radius:var(--radius);">
+                            <div class="detail-value">¥${(s.ncme_sales||0).toLocaleString()}</div>
+                            <div class="detail-label">NCME销售额</div>
+                        </div>
+                        <div style="text-align:center;padding:12px;background:var(--gray-50);border-radius:var(--radius);">
+                            <div class="detail-value">¥${(s.accessory_sales||0).toLocaleString()}</div>
+                            <div class="detail-label">配件销售额</div>
+                        </div>
+                        <div style="text-align:center;padding:12px;background:var(--gray-50);border-radius:var(--radius);">
+                            <div class="detail-value">${s.key_model_qty||0} 台</div>
+                            <div class="detail-label">W26重点机型</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.getElementById('detailModal').classList.add('show');
+    } catch(e) { console.error(e); }
+}
+function closeDetailModal() { document.getElementById('detailModal').classList.remove('show'); }
+document.getElementById('detailModal').addEventListener('click', e => { if (e.target===e.currentTarget) closeDetailModal(); });
+
+// ── 新增店员 ──
+function showAddStaff() { document.getElementById('addModal').classList.add('show'); }
+function closeAddModal() { document.getElementById('addModal').classList.remove('show'); }
+document.getElementById('addModal').addEventListener('click', e => { if (e.target===e.currentTarget) closeAddModal(); });
+async function submitAddStaff(e) {
+    e.preventDefault();
+    await App.api('/staff/create', { method:'POST', body: {
+        store_id: parseInt(document.getElementById('addStore').value),
+        name: document.getElementById('addName').value,
+        position: document.getElementById('addPos').value,
+        phone: document.getElementById('addPhone').value,
+        base_salary: parseFloat(document.getElementById('addSalary').value) || 3000
+    }});
+    closeAddModal(); loadStaffList();
+}
+
+// ── 同步数据 ──
+async function syncDaily() {
+    const date = prompt('同步日期 (YYYY-MM-DD)，留空默认昨天:');
+    try {
+        const res = await App.api('/staff/sync-daily' + (date ? '?date=' + date : ''), { method:'POST' });
+        alert(`✅ 同步完成: ${res.synced} 条记录 (${res.date})`);
+        loadStaffList();
+    } catch(e) { alert('同步失败: ' + e.message); }
+}
+
+// ── 排行 ──
+async function loadRanking() {
+    try {
+        const data = await App.api('/staff/ranking/sales');
+        let html = '<table class="data-table"><thead><tr><th>排名</th><th>姓名</th><th>门店</th><th style="text-align:right;">手机销量</th><th style="text-align:right;">W26</th><th style="text-align:right;">销售额</th><th style="text-align:right;">提成</th></tr></thead><tbody>';
+        html += data.map((r,i) => {
+            const cls = i===0?'top1':i===1?'top2':i===2?'top3':'normal';
+            const medal = ['🥇','🥈','🥉'][i] || `#${i+1}`;
+            return `<tr>
+                <td><span class="rank-num ${cls}">${medal}</span></td>
+                <td><strong>${r.name}</strong></td>
+                <td>${r.store_name}</td>
+                <td style="text-align:right;font-weight:600;">${r.phone_qty}</td>
+                <td style="text-align:right;">${r.key_model_qty}</td>
+                <td style="text-align:right;">¥${(r.phone_sales||0).toLocaleString()}</td>
+                <td style="text-align:right;font-weight:700;color:var(--comm-green);">¥${(r.commission||0).toLocaleString()}</td>
+            </tr>`;
+        }).join('');
+        html += '</tbody></table>';
+        document.getElementById('rankingContent').innerHTML = html;
+    } catch(e) { console.error(e); }
+}
+
+// ── 提成概览 ──
+let commChart = null;
+async function loadCommissionOverview() {
+    const month = document.getElementById('monthFilter').value || currentMonth;
+    try {
+        const staff = await App.api('/staff/list');
+        let totalPhone = 0, totalNcme = 0, totalAcc = 0, totalTrade = 0;
+        const storeComms = {};
+        for (const s of staff) {
+            const detail = await App.api(`/staff/${s.id}?month=${month}`);
+            const cd = detail.commission_detail || {};
+            for (const b of (cd.breakdown || [])) {
+                if (b.type === 'phone') totalPhone += b.amount;
+                else if (b.type === 'ncme') totalNcme += b.amount;
+                else if (b.type === 'accessory') totalAcc += b.amount;
+                else if (b.type === 'trade_in') totalTrade += b.amount;
+            }
+            const sn = detail.store_name || '未知';
+            storeComms[sn] = (storeComms[sn] || 0) + (cd.total || 0);
+        }
+        if (commChart) commChart.destroy();
+        const ctx = document.getElementById('commDonut').getContext('2d');
+        commChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['手机提成','NCME提成','配件提成','回收提成'],
+                datasets: [{ data:[totalPhone,totalNcme,totalAcc,totalTrade], backgroundColor:['#059669','#3b82f6','#8b5cf6','#f59e0b'], borderWidth:2, borderColor:'#fff' }]
+            },
+            options: { responsive:true, plugins:{legend:{display:false}} }
+        });
+        document.getElementById('donutLegend').innerHTML = `
+            <span><span class="donut-dot" style="background:#059669;"></span>手机 ¥${totalPhone.toLocaleString()}</span>
+            <span><span class="donut-dot" style="background:#3b82f6;"></span>NCME ¥${totalNcme.toLocaleString()}</span>
+            <span><span class="donut-dot" style="background:#8b5cf6;"></span>配件 ¥${totalAcc.toLocaleString()}</span>
+            <span><span class="donut-dot" style="background:#f59e0b;"></span>回收 ¥${totalTrade.toLocaleString()}</span>
+        `;
+        const sorted = Object.entries(storeComms).sort((a,b) => b[1]-a[1]).slice(0,8);
+        document.getElementById('storeCommRanking').innerHTML = sorted.length
+            ? sorted.map(([name,val],i) => `<div class="rank-row"><span class="rank-num ${i<3?'top'+(i+1):'normal'}">#${i+1}</span><span style="flex:1;">${name}</span><span class="comm-amount">¥${val.toLocaleString()}</span></div>`).join('')
+            : '<div style="padding:20px;text-align:center;color:var(--gray-400);">暂无数据</div>';
+    } catch(e) { console.error(e); }
+}
+
+// ── 规则 ──
+function loadRules() {
+    const rules = [
+        { name:'S26系列',   type:'手机', models:'S9420/S9470/S9480', method:'固定/台', val:'¥100' },
+        { name:'Fold7',     type:'手机', models:'ZFOLD7',           method:'固定/台', val:'¥150' },
+        { name:'Flip7',     type:'手机', models:'ZFLIP7',           method:'固定/台', val:'¥100' },
+        { name:'W26',       type:'手机', models:'W26',              method:'固定/台', val:'¥300' },
+        { name:'手表/耳机', type:'配件', models:'Watch/Buds',       method:'按销售额', val:'5%'   },
+        { name:'平板',      type:'配件', models:'Tab系列',          method:'按销售额', val:'3%'   },
+        { name:'配件',      type:'配件', models:'-',                method:'按销售额', val:'10%'  },
+        { name:'回收',      type:'回收', models:'-',                method:'固定/台', val:'¥20'  },
+    ];
+    document.getElementById('rulesTbody').innerHTML = rules.map(r => `<tr>
+        <td><strong>${r.name}</strong></td>
+        <td><span class="badge-tag success">${r.type}</span></td>
+        <td>${r.models}</td>
+        <td>${r.method}</td>
+        <td style="text-align:right;font-weight:700;color:var(--comm-green);">${r.val}</td>
+    </tr>`).join('');
+}
+
+// ── 活动 ──
+async function loadActivities() {
+    try {
+        const data = await App.api('/staff/activities/list');
+        document.getElementById('activitiesContent').innerHTML = data.length
+            ? data.map(a => `
+                <div class="card" style="margin-bottom:12px;border-left:3px solid var(--primary);">
+                    <div class="card-header">
+                        <strong>${a.title}</strong>
+                        <span class="badge-tag success">${a.category}</span>
+                    </div>
+                    ${a.content ? `<div class="card-body" style="padding-top:0;"><p style="color:var(--gray-500);margin:0;">${a.content}</p></div>` : ''}
+                    ${a.start_date ? `<div class="card-footer" style="font-size:12px;color:var(--gray-400);">📅 ${a.start_date} ~ ${a.end_date||''}</div>` : ''}
+                </div>
+            `).join('')
+            : fallbackActivities();
+    } catch(e) { document.getElementById('activitiesContent').innerHTML = fallbackActivities(); }
+}
+function fallbackActivities() {
+    const items = [
+        { title:'6月开门红',       cat:'活动', start:'2026-06-01', end:'2026-06-30', body:'三星手机全场满减+以旧换新补贴',            color:'var(--primary)' },
+        { title:'W26新品培训',     cat:'培训', body:'W26产品卖点与销售话术培训资料',                                             color:'#8b5cf6' },
+        { title:'6月提成方案',     cat:'政策', body:'S26提成100/台，Fold7提成150/台，Flip7提成100/台，W26提成300/台',                color:'#f59e0b' },
+    ];
+    return items.map(it => `
+        <div class="card" style="margin-bottom:12px;border-left:3px solid ${it.color};">
+            <div class="card-header"><strong>${it.title}</strong><span class="badge-tag success">${it.cat}</span></div>
+            <div class="card-body" style="padding-top:0;"><p style="color:var(--gray-500);margin:0;">${it.body}</p></div>
+            ${it.start ? `<div class="card-footer" style="font-size:12px;color:var(--gray-400);">📅 ${it.start} ~ ${it.end}</div>` : ''}
+        </div>
+    `).join('');
+}
+
+// ── 启动 ──
+initMonthFilter();
+initStoreFilter().then(() => loadStaffList());
+</script>
+</body>
+</html>

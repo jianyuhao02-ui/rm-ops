@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1428a0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="三星管理">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <title>三星事业部 - 登录</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-logo">
+            <div class="logo-icon">S</div>
+            <h1>三星事业部管理平台</h1>
+            <p>Samsung Operations Management</p>
+        </div>
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label>账号</label>
+                <input type="text" id="username" placeholder="请输入账号" autocomplete="username" required>
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="password" placeholder="请输入密码" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn btn-primary" id="loginBtn">登 录</button>
+            <div class="login-error" id="loginError"></div>
+        </form>
+        <div style="text-align:center;margin-top:20px;">
+            <a href="/manual" style="color:#64748b;font-size:13px;text-decoration:none;">📖 查看使用手册</a>
+        </div>
+    </div>
+</div>
+<script>
+function handleLogin(e) {
+    e.preventDefault();
+    const btn = document.getElementById('loginBtn');
+    const errEl = document.getElementById('loginError');
+    errEl.classList.remove('show');
+    btn.disabled = true;
+    btn.textContent = '登录中...';
+
+    fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            username: document.getElementById('username').value.trim(),
+            password: document.getElementById('password').value
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.token) {
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('user', JSON.stringify(data.user));
+            window.location.href = '/dashboard';
+        } else {
+            throw new Error(data.detail || '登录失败');
+        }
+    })
+    .catch(err => {
+        errEl.textContent = err.message;
+        errEl.classList.add('show');
+        btn.disabled = false;
+        btn.textContent = '登 录';
+    });
+}
+
+// 自动跳转：已登录则直接进看板
+if (localStorage.getItem('token')) {
+    window.location.href = '/dashboard';
+}
+</script>
+</body>
+</html>

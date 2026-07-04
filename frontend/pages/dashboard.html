@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1428a0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="三星管理">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <title>数据总览 - 三星事业部</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        /* ══════ 快速成交卡片 ══════ */
+        .quick-deal-card { background: #fff; border-radius: 14px; padding: 20px 24px; border: 2px solid var(--primary); border-left: 5px solid var(--primary); margin-bottom: 20px; position: relative; overflow: hidden; }
+        .quick-deal-card::before { content: ''; position: absolute; top: -40px; right: -40px; width: 120px; height: 120px; background: var(--primary-bg); border-radius: 50%; opacity: .4; pointer-events: none; }
+        .qd-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; position: relative; z-index: 1; }
+        .qd-header h2 { font-size: 17px; font-weight: 700; color: var(--primary); margin: 0; }
+        .qd-header .qd-today { font-size: 13px; color: var(--gray-500); display: flex; gap: 16px; }
+        .qd-header .qd-today strong { color: var(--primary); }
+        .qd-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; position: relative; z-index: 1; }
+        .qd-field { display: flex; flex-direction: column; min-width: 0; }
+        .qd-field label { font-size: 12px; font-weight: 500; color: var(--gray-500); margin-bottom: 5px; white-space: nowrap; }
+        .qd-field input, .qd-field select { padding: 9px 12px; border: 1px solid var(--gray-300); border-radius: 8px; font-size: 14px; font-family: inherit; transition: all .2s; background: #fff; min-width: 0; }
+        .qd-field input:focus, .qd-field select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(20,40,160,.08); }
+        .qd-field.phone { flex: 1 1 150px; max-width: 170px; }
+        .qd-field.model { flex: 1 1 180px; }
+        .qd-field.price { flex: 0 0 130px; }
+        .qd-field.staff { flex: 0 0 150px; }
+        .qd-field.store { flex: 0 0 170px; }
+        .qd-field.submit { flex: 0 0 auto; }
+        .qd-field.submit button { padding: 10px 28px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all .2s; }
+        .qd-field.submit button:hover { background: var(--primary-light); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(20,40,160,.25); }
+        .qd-field.submit button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+        .qd-expand { margin-top: 12px; position: relative; z-index: 1; }
+        .qd-expand summary { font-size: 13px; color: var(--gray-500); cursor: pointer; user-select: none; padding: 4px 0; }
+        .qd-expand summary:hover { color: var(--primary); }
+        .qd-expand .qd-extra { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+        .qd-expand .qd-extra .qd-field { flex: 0 0 140px; }
+        .qd-member-preview { margin-top: 10px; font-size: 13px; padding: 8px 12px; border-radius: 8px; background: var(--primary-bg); position: relative; z-index: 1; display: none; }
+        .qd-member-preview .mem-name { font-weight: 600; color: var(--primary); }
+        .qd-member-preview .mem-new { color: var(--success); font-weight: 600; }
+        .qd-toast { position: fixed; top: 20px; right: 20px; background: var(--success); color: #fff; padding: 14px 22px; border-radius: 10px; font-weight: 500; z-index: 9999; animation: qdSlide .3s ease; box-shadow: 0 4px 20px rgba(0,0,0,.15); }
+        @keyframes qdSlide { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+        .qd-loading { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: qdSpin .6s linear infinite; vertical-align: middle; margin-right: 4px; }
+        @keyframes qdSpin { to{transform:rotate(360deg)} }
+        /* ── 平板端 (≤900px) ── */
+        @media (max-width: 900px) {
+            .qd-form { flex-direction: column; align-items: stretch; }
+            .qd-field.phone, .qd-field.model, .qd-field.price, .qd-field.staff, .qd-field.store { max-width: none; flex: 1 1 auto; }
+            .qd-field.submit button { width: 100%; }
+        }
+        /* ── 手机端 (≤768px) ── */
+        @media (max-width: 768px) {
+            .quick-deal-card {
+                margin: -16px -16px 16px -16px;
+                border-radius: 0;
+                border-left: none;
+                border-right: none;
+                border-top: 4px solid var(--primary);
+                border-bottom: 2px solid var(--primary);
+                padding: 16px 16px 8px;
+            }
+            .quick-deal-card::before { display: none; }
+            .qd-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+                margin-bottom: 14px;
+            }
+            .qd-header h2 { font-size: 15px; }
+            .qd-header .qd-today {
+                font-size: 12px;
+                gap: 10px;
+                flex-wrap: wrap;
+                width: 100%;
+                background: var(--primary-bg);
+                padding: 8px 12px;
+                border-radius: 8px;
+            }
+            .qd-form { gap: 10px; }
+            .qd-field label { font-size: 13px; margin-bottom: 6px; }
+            .qd-field input, .qd-field select {
+                padding: 12px 14px;
+                font-size: 16px; /* 防 iOS 缩放 */
+                border-radius: 10px;
+                min-height: 46px;
+            }
+            .qd-field.submit {
+                position: sticky;
+                bottom: 0;
+                z-index: 100;
+                padding: 10px 0 12px;
+                margin-top: 2px;
+                background: linear-gradient(to top, #fff 65%, transparent);
+            }
+            .qd-field.submit button {
+                width: 100%;
+                padding: 14px;
+                font-size: 17px;
+                border-radius: 12px;
+                box-shadow: 0 4px 20px rgba(20,40,160,.35);
+            }
+            .qd-expand { margin-top: 8px; }
+            .qd-expand summary { font-size: 14px; padding: 8px 0; }
+            .qd-expand .qd-extra { flex-direction: column; gap: 10px; }
+            .qd-expand .qd-extra .qd-field { flex: 1 1 auto; }
+            .qd-member-preview {
+                font-size: 14px;
+                padding: 10px 14px;
+                border-radius: 10px;
+            }
+            .qd-toast {
+                top: auto;
+                bottom: 24px;
+                left: 16px;
+                right: 16px;
+                text-align: center;
+                border-radius: 12px;
+                font-size: 15px;
+                padding: 14px 20px;
+            }
+        }
+        /* ── 小屏手机 (≤400px) ── */
+        @media (max-width: 400px) {
+            .quick-deal-card { padding: 12px; }
+            .qd-header .qd-today { font-size: 11px; gap: 8px; padding: 6px 10px; }
+            .qd-field input, .qd-field select { padding: 10px 12px; font-size: 15px; min-height: 42px; }
+            .qd-field.submit button { padding: 12px; font-size: 16px; }
+        }
+    </style>
+</head>
+<body>
+<div class="app-layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main-content">
+        <div class="topbar" id="topbar"></div>
+        <div class="page-content">
+            <!-- ══════ 快速成交 ══════ -->
+            <div class="quick-deal-card" id="quickDealCard">
+                <div class="qd-header">
+                    <h2>🧾 快速成交</h2>
+                    <div class="qd-today">
+                        <span>今日 <strong id="qdTodayOrders">--</strong> 单</span>
+                        <span>手机 <strong id="qdTodayPhone">--</strong></span>
+                        <span>提成 <strong id="qdTodayCommission">--</strong></span>
+                    </div>
+                </div>
+                <form class="qd-form" id="quickDealForm" onsubmit="qdSubmit(event)">
+                    <div class="qd-field phone">
+                        <label>📱 客户手机号</label>
+                        <input type="tel" id="qdPhone" placeholder="输入手机号" maxlength="11" onblur="qdLookupMember()">
+                    </div>
+                    <div class="qd-field model">
+                        <label>📱 机型 <span style="color:var(--danger)">*</span></label>
+                        <select id="qdModel" onchange="qdOnModelChange()">
+                            <option value="">-- 选择机型 --</option>
+                        </select>
+                    </div>
+                    <div class="qd-field price">
+                        <label>💰 成交金额 <span style="color:var(--danger)">*</span></label>
+                        <input type="number" id="qdPrice" placeholder="实际成交价" step="0.01">
+                    </div>
+                    <div class="qd-field staff">
+                        <label>👤 店员 <span style="color:var(--danger)">*</span></label>
+                        <select id="qdStaff"></select>
+                    </div>
+                    <div class="qd-field store">
+                        <label>🏪 门店</label>
+                        <select id="qdStore" onchange="qdOnStoreChange()"></select>
+                    </div>
+                    <div class="qd-field submit">
+                        <label>&nbsp;</label>
+                        <button type="submit" id="qdSubmitBtn">✅ 确认成交</button>
+                    </div>
+                </form>
+                <details class="qd-expand">
+                    <summary>📋 更多字段（规格 / 颜色 / IMEI / 以旧换新）</summary>
+                    <div class="qd-extra">
+                        <div class="qd-field"><label>规格</label><input type="text" id="qdSpec" placeholder="如 12+512GB"></div>
+                        <div class="qd-field"><label>颜色</label><input type="text" id="qdColor" placeholder="选填"></div>
+                        <div class="qd-field"><label>IMEI/串号</label><input type="text" id="qdImei" placeholder="手机串号"></div>
+                        <div class="qd-field"><label>以旧换新·旧机</label><input type="text" id="qdTradeModel" placeholder="旧机型号"></div>
+                        <div class="qd-field"><label>折价金额</label><input type="number" id="qdTradeAmount" placeholder="0" step="0.01"></div>
+                        <div class="qd-field"><label>新客姓名</label><input type="text" id="qdMemberName" placeholder="新会员姓名"></div>
+                    </div>
+                </details>
+                <div class="qd-member-preview" id="qdMemberPreview"></div>
+            </div>
+
+            <div class="stats-grid" id="statsGrid"></div>
+            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:16px; margin-bottom:24px;">
+                <div class="card">
+                    <div class="card-header"><h3>📈 本月销售趋势</h3></div>
+                    <div class="card-body"><canvas id="salesTrendChart" height="250"></canvas></div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><h3>🏆 门店完成率排名</h3></div>
+                    <div class="card-body" id="storeRanking"><div class="loading-spinner">加载中</div></div>
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:24px;">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>📦 库存预警 <span class="badge-tag danger" id="alertCount"></span></h3>
+                        <a href="/inventory" style="font-size:13px; color:var(--primary); text-decoration:none;">查看详情 →</a>
+                    </div>
+                    <div class="card-body" id="inventoryAlerts"><div class="loading-spinner">加载中</div></div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>⚠️ 价格异常</h3>
+                        <a href="/prices" style="font-size:13px; color:var(--primary); text-decoration:none;">查看详情 →</a>
+                    </div>
+                    <div class="card-body" id="priceAnomalies"><div class="loading-spinner">加载中</div></div>
+                </div>
+            </div>
+
+            <!-- ══════ 会员管理板块 ══════ -->
+            <div style="margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;">
+                <h2 style="font-size:16px; font-weight:700; color:var(--gray-800); margin:0;">
+                    👤 会员管理
+                </h2>
+                <a href="/members" style="font-size:13px; color:var(--primary); text-decoration:none; font-weight:600;">进入会员管理 →</a>
+            </div>
+
+            <!-- 会员统计4卡片 -->
+            <div class="stats-grid" id="memberStatsGrid" style="margin-bottom:24px;"></div>
+
+            <!-- 待跟进 + 近期购机 -->
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:24px;">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>📞 待跟进客户 <span class="badge-tag danger" id="pendingFollowupCount"></span></h3>
+                        <a href="/members" style="font-size:13px; color:var(--primary); text-decoration:none;">全部 →</a>
+                    </div>
+                    <div class="card-body" id="pendingFollowupList"><div class="loading-spinner">加载中</div></div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>🛒 近期购机记录</h3>
+                        <a href="/members" style="font-size:13px; color:var(--primary); text-decoration:none;">全部 →</a>
+                    </div>
+                    <div class="card-body" id="recentPurchaseList"><div class="loading-spinner">加载中</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+const now = new Date();
+const year = now.getFullYear();
+const month = now.getMonth() + 1;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.init()) return;
+    App.renderSidebar('dashboard');
+    App.renderTopbar('数据总览');
+    // 并行加载：仪表盘数据 + 快速成交组件
+    await Promise.all([
+        loadSalesStats(),
+        loadInventoryAlerts(),
+        loadPriceAnomalies(),
+        loadMemberStats(),
+        loadPendingFollowups(),
+        loadRecentPurchases(),
+        qdInit()
+    ]);
+});
+
+async function loadSalesStats() {
+    try {
+        // 先尝试当月，无数据则自动切换到有数据的月份
+        let data = await App.api(`/sales/monthly?year=${year}&month=${month}&token=${App.token}`);
+        const hasAnyData = (data.stores || []).some(s => s.phone_sales_done > 0 || s.phone_qty_done > 0);
+        if (!hasAnyData) {
+            const latest = await App.api(`/sales/latest-month?token=${App.token}`);
+            if (latest && latest.year && latest.month) {
+                data = await App.api(`/sales/monthly?year=${latest.year}&month=${latest.month}&token=${App.token}`);
+                year = latest.year; month = latest.month;
+            }
+        }
+        renderStatsCards(data);
+        renderStoreRanking(data);
+        await renderTrend();
+    } catch(e) { console.error(e); }
+}
+
+function renderStatsCards(data) {
+    const stores = data.stores || [];
+    let totalSales = 0, totalTarget = 0, totalQty = 0, totalNcme = 0, totalAcc = 0, totalTradeIn = 0;
+
+    stores.forEach(s => {
+        totalSales += s.phone_sales_done;
+        totalTarget += s.phone_sales_target;
+        totalQty += s.phone_qty_done;
+        totalNcme += s.ncme_done;
+        totalAcc += s.accessory_done;
+        totalTradeIn += s.trade_in_done;
+    });
+
+    const overallRate = totalTarget > 0 ? Math.round(totalSales / totalTarget * 1000) / 10 : 0;
+
+    document.getElementById('statsGrid').innerHTML = `
+        <div class="stat-card">
+            <div class="stat-icon blue">💰</div>
+            <div class="stat-info">
+                <h4>${App.formatPrice(totalSales)}</h4>
+                <p>本月手机销售（目标 ${App.formatPrice(totalTarget)}）</p>
+                <div class="progress-bar" style="margin-top:8px; width:120px;">
+                    <div class="fill ${overallRate >= 80 ? 'green' : overallRate >= 50 ? 'yellow' : 'red'}" style="width:${Math.min(overallRate, 100)}%"></div>
+                </div>
+                <small style="color:var(--gray-500);">完成 ${overallRate}%</small>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon green">📱</div>
+            <div class="stat-info">
+                <h4>${totalQty}</h4>
+                <p>手机累计台量</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon orange">📋</div>
+            <div class="stat-info">
+                <h4>${App.formatPrice(totalNcme)}</h4>
+                <p>NCME销售额</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon purple">🏪</div>
+            <div class="stat-info">
+                <h4>${stores.length}</h4>
+                <p>在营门店</p>
+            </div>
+        </div>
+    `;
+}
+
+function renderStoreRanking(data) {
+    const stores = data.stores || [];
+    const sorted = [...stores].sort((a, b) => (b.phone_sales_rate || 0) - (a.phone_sales_rate || 0));
+    document.getElementById('storeRanking').innerHTML = sorted.map((s, i) => `
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--gray-100);">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-weight:700; color:${i < 3 ? 'var(--accent)' : 'var(--gray-400)'}; width:20px; font-size:${i < 3 ? '16px' : '13px'};">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</span>
+                <span style="font-size:13px;">${s.store_name.replace('三星', '').replace('授权体验店', '').replace('授权旗舰店', '')}</span>
+            </div>
+            <div style="text-align:right;">
+                <span class="badge-tag ${s.phone_sales_rate >= 80 ? 'success' : s.phone_sales_rate >= 50 ? 'warning' : s.phone_sales_rate > 0 ? 'danger' : 'info'}">${s.phone_sales_rate || 0}%</span>
+                <div style="font-size:11px; color:var(--gray-400);">${App.formatPrice(s.phone_sales_done)}</div>
+            </div>
+        </div>
+    `).join('') || '<p style="color:var(--gray-400); text-align:center;">暂无数据</p>';
+}
+
+async function renderTrend() {
+    try {
+        const data = await App.api(`/sales/daily-trend?year=${year}&month=${month}&token=${App.token}`);
+        if (!data.length) {
+            document.getElementById('salesTrendChart').parentElement.innerHTML = '<p style="color:var(--gray-400); text-align:center; padding:40px;">暂无趋势数据</p>';
+            return;
+        }
+        const ctx = document.getElementById('salesTrendChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.map(d => d.date.substring(5)),
+                datasets: [{
+                    label: '每日销售额',
+                    data: data.map(d => d.sales),
+                    backgroundColor: 'rgba(20,40,160,.7)',
+                    borderRadius: 4,
+                    yAxisID: 'y'
+                }, {
+                    label: '每日台量',
+                    data: data.map(d => d.qty),
+                    type: 'line',
+                    borderColor: '#ff6b35',
+                    backgroundColor: 'rgba(255,107,53,.1)',
+                    tension: 0.4,
+                    pointRadius: 4,
+                    yAxisID: 'y1'
+                }]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { position: 'bottom' } },
+                scales: {
+                    y: { beginAtZero: true, position: 'left', title: { display: true, text: '销售额（元）' } },
+                    y1: { beginAtZero: true, position: 'right', title: { display: true, text: '台量' }, grid: { display: false } }
+                }
+            }
+        });
+    } catch(e) {
+        document.getElementById('salesTrendChart').parentElement.innerHTML = '<p style="color:var(--gray-400); text-align:center; padding:40px;">加载失败</p>';
+    }
+}
+
+async function loadInventoryAlerts() {
+    try {
+        const data = await App.api(`/inventory/alerts?token=${App.token}`);
+        const alerts = data.alerts || [];
+        const countEl = document.getElementById('alertCount');
+        if (countEl) countEl.textContent = alerts.length > 0 ? alerts.length : '';
+
+        if (alerts.length === 0) {
+            document.getElementById('inventoryAlerts').innerHTML = '<p style="color:var(--success); text-align:center; padding:20px;">✅ 暂无库存预警</p>';
+            return;
+        }
+
+        document.getElementById('inventoryAlerts').innerHTML = alerts.slice(0, 8).map(a => `
+            <div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--gray-100); font-size:13px;">
+                <span class="badge-tag ${a.level === 'danger' ? 'danger' : 'warning'}">${a.series}</span>
+                <span style="flex:1; color:var(--gray-700);">${a.message}</span>
+            </div>
+        `).join('');
+    } catch(e) {
+        document.getElementById('inventoryAlerts').innerHTML = '<p style="color:var(--gray-400); text-align:center; padding:20px;">加载失败</p>';
+    }
+}
+
+async function loadPriceAnomalies() {
+    try {
+        const data = await App.api(`/prices/summary?token=${App.token}`);
+        const anomalies = data.anomalies || [];
+
+        if (anomalies.length === 0) {
+            document.getElementById('priceAnomalies').innerHTML = '<p style="color:var(--success); text-align:center; padding:20px;">✅ 暂无价格异常</p>';
+            return;
+        }
+
+        document.getElementById('priceAnomalies').innerHTML = anomalies.slice(0, 6).map(a => `
+            <div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--gray-100); font-size:13px;">
+                <span class="badge-tag danger">低价</span>
+                <span style="flex:1;">
+                    <strong>${a.model}</strong> ${a.spec} · ${a.platform}
+                </span>
+                <span style="color:var(--danger); font-weight:600;">¥${a.price.toLocaleString()}</span>
+                <span style="color:var(--gray-400); font-size:11px;">低于公司 ¥${a.diff.toLocaleString()}</span>
+            </div>
+        `).join('');
+    } catch(e) {
+        document.getElementById('priceAnomalies').innerHTML = '<p style="color:var(--gray-400); text-align:center; padding:20px;">加载失败</p>';
+    }
+}
+
+// ══════ 会员管理板块 ══════
+
+async function loadMemberStats() {
+    try {
+        const data = await App.api(`/members/stats?token=${App.token}`);
+        const total = data.total || 0;
+        const vip = data.vip_count || 0;
+        const purchases30d = data.purchases_30d || 0;
+        const pending = data.pending_followups || 0;
+        const totalSpent = data.total_spent || 0;
+
+        // 更新待跟进徽章
+        const pfc = document.getElementById('pendingFollowupCount');
+        if (pfc) pfc.textContent = pending > 0 ? pending : '';
+
+        document.getElementById('memberStatsGrid').innerHTML = `
+            <div class="stat-card" onclick="location.href='/members'" style="cursor:pointer;">
+                <div class="stat-icon blue">👥</div>
+                <div class="stat-info">
+                    <h4>${total.toLocaleString()}</h4>
+                    <p>会员总数</p>
+                    <small style="color:var(--gray-500);">本月新增 ${data.new_this_month || 0} 人</small>
+                </div>
+            </div>
+            <div class="stat-card" onclick="location.href='/members'" style="cursor:pointer;">
+                <div class="stat-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; width:40px; height:40px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;">⭐</div>
+                <div class="stat-info">
+                    <h4>${vip.toLocaleString()}</h4>
+                    <p>VIP 会员</p>
+                    <small style="color:var(--gray-500);">累计消费 ${App.formatPrice(totalSpent)}</small>
+                </div>
+            </div>
+            <div class="stat-card" onclick="location.href='/members'" style="cursor:pointer;">
+                <div class="stat-icon green">📱</div>
+                <div class="stat-info">
+                    <h4>${purchases30d}</h4>
+                    <p>近 30 天购机</p>
+                    ${data.top_models && data.top_models.length > 0 ? `<small style="color:var(--gray-500);">热门: ${data.top_models[0].model_code}</small>` : ''}
+                </div>
+            </div>
+            <div class="stat-card" onclick="location.href='/members'" style="cursor:pointer; ${pending > 0 ? 'border-left:3px solid var(--danger);' : ''}">
+                <div class="stat-icon ${pending > 0 ? '' : 'purple'}" style="${pending > 0 ? 'background:rgba(239,68,68,.1); color:#ef4444; width:40px; height:40px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;' : ''}">📞</div>
+                <div class="stat-info">
+                    <h4 style="${pending > 0 ? 'color:var(--danger);' : ''}">${pending}</h4>
+                    <p>待跟进客户</p>
+                    <small style="color:${pending > 0 ? 'var(--danger)' : 'var(--gray-500)'};">${pending > 0 ? '需要及时跟进' : '跟进状态良好'}</small>
+                </div>
+            </div>
+        `;
+    } catch(e) {
+        document.getElementById('memberStatsGrid').innerHTML = '<div style="padding:16px; color:var(--gray-400); font-size:13px;">会员数据加载失败（可能是新功能，需要重启服务）</div>';
+    }
+}
+
+async function loadPendingFollowups() {
+    try {
+        const data = await App.api(`/members/followups/pending?token=${App.token}&page=1&page_size=6`);
+        const list = data.data || [];
+
+        if (list.length === 0) {
+            document.getElementById('pendingFollowupList').innerHTML = '<p style="color:var(--success); text-align:center; padding:20px;">✅ 暂无待跟进客户</p>';
+            return;
+        }
+
+        const typeMap = { call:'📞', wechat:'💬', visit:'🚶', sms:'📩' };
+        document.getElementById('pendingFollowupList').innerHTML = list.map(f => {
+            const icon = typeMap[f.followup_type] || '📋';
+            const nextDate = f.next_followup_date ? `<span style="color:var(--danger); font-size:11px;">📅 ${f.next_followup_date}</span>` : '';
+            const isOverdue = f.next_followup_date && f.next_followup_date < new Date().toISOString().slice(0,10);
+            return `
+            <div style="padding:8px 0; border-bottom:1px solid var(--gray-100); font-size:13px; ${isOverdue ? 'background:rgba(239,68,68,.04); margin:0 -4px; padding:8px 4px; border-radius:4px;' : ''}">
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                    <span>${icon}</span>
+                    <strong style="color:var(--gray-800);">${f.member_name}</strong>
+                    <span style="color:var(--gray-400); font-size:11px;">${f.member_phone}</span>
+                    ${isOverdue ? '<span class="badge-tag danger" style="font-size:10px;">逾期</span>' : ''}
+                </div>
+                <div style="color:var(--gray-600); font-size:12px; margin-left:22px; line-height:1.4;">
+                    ${f.content.length > 40 ? f.content.slice(0,40)+'...' : f.content}
+                </div>
+                <div style="margin-left:22px; margin-top:4px; display:flex; gap:8px; align-items:center;">
+                    ${nextDate}
+                    ${f.store_name ? `<span style="color:var(--gray-400); font-size:11px;">${f.store_name.replace('三星','').replace('授权体验店','').replace('授权旗舰店','')}</span>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        document.getElementById('pendingFollowupList').innerHTML = '<p style="color:var(--gray-400); text-align:center; padding:20px;">加载失败</p>';
+    }
+}
+
+async function loadRecentPurchases() {
+    try {
+        const data = await App.api(`/members/list?token=${App.token}&page=1&page_size=1`);
+        // 用 list 接口获取会员，然后取最近有购机记录的
+        // 直接取 member_purchases 最近记录（通过stats接口已能获取台量，这里用另一种方式）
+        const membersData = await App.api(`/members/list?token=${App.token}&page=1&page_size=50`);
+        const members = membersData.data || [];
+
+        // 过滤出有购机记录的，按最近活跃排
+        const withPurchase = members
+            .filter(m => m.total_spent > 0)
+            .sort((a, b) => (b.last_purchase_date || '').localeCompare(a.last_purchase_date || ''))
+            .slice(0, 6);
+
+        if (withPurchase.length === 0) {
+            document.getElementById('recentPurchaseList').innerHTML = '<p style="color:var(--gray-400); text-align:center; padding:20px;">暂无购机记录</p>';
+            return;
+        }
+
+        const levelColor = { '钻石':'#a855f7', '金卡':'#f59e0b', '银卡':'#94a3b8', '普通':'#64748b' };
+        document.getElementById('recentPurchaseList').innerHTML = withPurchase.map(m => `
+            <div style="display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--gray-100); font-size:13px;">
+                <div style="width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--primary),#4f87ff); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0;">${m.name[0]}</div>
+                <div style="flex:1; min-width:0;">
+                    <div style="display:flex; align-items:center; gap:4px;">
+                        <strong style="color:var(--gray-800);">${m.name}</strong>
+                        ${m.is_vip ? '<span style="color:#f59e0b; font-size:12px;">⭐</span>' : ''}
+                        <span style="font-size:11px; color:${levelColor[m.level]||'#64748b'}; font-weight:600;">${m.level}</span>
+                    </div>
+                    <div style="font-size:11px; color:var(--gray-500);">${m.store_name || ''}</div>
+                </div>
+                <div style="text-align:right; flex-shrink:0;">
+                    <div style="font-weight:600; color:var(--primary);">${App.formatPrice(m.total_spent)}</div>
+                    <div style="font-size:11px; color:var(--gray-400);">${m.purchase_count || 1}次消费</div>
+                </div>
+            </div>
+        `).join('');
+    } catch(e) {
+        document.getElementById('recentPurchaseList').innerHTML = '<p style="color:var(--gray-400); text-align:center; padding:20px;">加载失败</p>';
+    }
+}
+
+// ══════ 快速成交模块 ══════
+let qdModelCatalog = [];
+
+async function qdInit() {
+    await Promise.all([qdLoadModels(), qdLoadStaff(), qdLoadStores(), qdRefreshToday()]);
+}
+
+async function qdLoadModels() {
+    try {
+        const data = await App.api(`orders/model-catalog?token=${App.token}`);
+        qdModelCatalog = data || [];
+        const sel = document.getElementById('qdModel');
+        sel.innerHTML = '<option value="">-- 选择机型 --</option>' +
+            qdModelCatalog.map(m => `<option value="${m.model_code}" data-spec="${m.spec||''}" data-price="${m.suggested_price||0}" data-name="${m.name||''}">${m.model_code} — ${(m.spec||'').slice(0,20)}</option>`).join('');
+    } catch(e) { console.error('qd: 加载机型失败', e); }
+}
+
+async function qdLoadStaff() {
+    try {
+        const data = await App.api(`staff/list?token=${App.token}`);
+        const sel = document.getElementById('qdStaff');
+        const u = App.user;
+        sel.innerHTML = data.map(s => {
+            const def = (s.name === u?.display_name || s.id === u?.staff_id) ? 'selected' : '';
+            return `<option value="${s.id}" ${def}>${s.name} — ${(s.store_name||'').replace('三星','').replace('授权体验店','').slice(0,6)}${def?' (我)':''}</option>`;
+        }).join('');
+        if (!data.length) sel.innerHTML = '<option value="">-- 无店员数据 --</option>';
+    } catch(e) { console.error('qd: 加载店员失败', e); }
+}
+
+async function qdLoadStores() {
+    try {
+        const data = await App.api(`sales/stores?token=${App.token}`);
+        const sel = document.getElementById('qdStore');
+        const u = App.user;
+        sel.innerHTML = data.map(s => {
+            const def = (u?.store_id && s.id == u.store_id) ? 'selected' : '';
+            return `<option value="${s.id}" ${def}>${s.name}</option>`;
+        }).join('');
+        if (!data.length) sel.innerHTML = '<option value="">-- 无门店数据 --</option>';
+    } catch(e) { console.error('qd: 加载门店失败', e); }
+}
+
+function qdGetStoreId() {
+    const sel = document.getElementById('qdStore');
+    if (sel && sel.value) return parseInt(sel.value);
+    return App.user?.store_id || 1;
+}
+
+function qdGetStaffId() {
+    const sel = document.getElementById('qdStaff');
+    return sel && sel.value ? parseInt(sel.value) : null;
+}
+
+function qdOnModelChange() {
+    const sel = document.getElementById('qdModel');
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) return;
+    const price = parseFloat(opt.dataset.price || 0);
+    if (price > 0) document.getElementById('qdPrice').value = price;
+}
+
+function qdOnStoreChange() { qdLoadStaff(); }
+
+async function qdLookupMember() {
+    const phone = document.getElementById('qdPhone').value.trim();
+    if (phone.length < 11) return;
+    const preview = document.getElementById('qdMemberPreview');
+    try {
+        const data = await App.api(`member/list?search=${phone}&limit=1&token=${App.token}`);
+        if (data && data.length > 0) {
+            const m = data[0];
+            preview.style.display = 'block';
+            preview.innerHTML = `✅ 老客户：<span class="mem-name">${m.name}</span> | ${m.level||'普通'} | 累计消费 ¥${(m.total_spent||0).toLocaleString()}`;
+        } else {
+            preview.style.display = 'block';
+            preview.innerHTML = `🆕 <span class="mem-new">新客户</span> — 成交后自动创建会员档案`;
+        }
+    } catch(e) {
+        preview.style.display = 'block';
+        preview.innerHTML = `🆕 <span class="mem-new">新客户</span> — 成交后自动创建会员档案`;
+    }
+}
+
+async function qdSubmit(e) {
+    e.preventDefault();
+    const btn = document.getElementById('qdSubmitBtn');
+    const modelCode = document.getElementById('qdModel').value;
+    const price = parseFloat(document.getElementById('qdPrice').value);
+    const staffId = qdGetStaffId();
+    const storeId = qdGetStoreId();
+
+    if (!modelCode) return alert('请选择机型');
+    if (!price || price <= 0) return alert('请输入有效成交金额');
+    if (!staffId) return alert('请选择店员');
+    if (!storeId) return alert('请选择门店');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="qd-loading"></span>提交中';
+
+    try {
+        const body = {
+            store_id: storeId,
+            staff_id: staffId,
+            model_code: modelCode,
+            product_name: document.getElementById('qdModel').selectedOptions[0]?.dataset?.name || modelCode,
+            spec: document.getElementById('qdSpec').value.trim(),
+            color: document.getElementById('qdColor').value.trim(),
+            imei: document.getElementById('qdImei').value.trim(),
+            original_price: parseFloat(document.getElementById('qdModel').selectedOptions[0]?.dataset?.price || 0),
+            actual_price: price,
+            member_phone: document.getElementById('qdPhone').value.trim(),
+            member_name: document.getElementById('qdMemberName').value.trim(),
+            trade_in_model: document.getElementById('qdTradeModel').value.trim(),
+            trade_in_amount: parseFloat(document.getElementById('qdTradeAmount').value || 0),
+        };
+        const result = await App.api('orders/create', { method: 'POST', body, token: App.token });
+        qdToast('✅ 成交！' + (result.message || ''));
+        qdResetForm();
+        await Promise.all([qdRefreshToday(), loadSalesStats()]);
+    } catch(e) {
+        alert('提交失败: ' + (e.message || '未知错误'));
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '✅ 确认成交';
+    }
+}
+
+function qdResetForm() {
+    document.getElementById('qdPhone').value = '';
+    document.getElementById('qdModel').selectedIndex = 0;
+    document.getElementById('qdPrice').value = '';
+    document.getElementById('qdSpec').value = '';
+    document.getElementById('qdColor').value = '';
+    document.getElementById('qdImei').value = '';
+    document.getElementById('qdTradeModel').value = '';
+    document.getElementById('qdTradeAmount').value = '';
+    document.getElementById('qdMemberName').value = '';
+    document.getElementById('qdMemberPreview').style.display = 'none';
+}
+
+async function qdRefreshToday() {
+    const storeId = qdGetStoreId();
+    try {
+        const data = await App.api(`orders/today?store_id=${storeId}&token=${App.token}`);
+        document.getElementById('qdTodayOrders').textContent = data.total_orders || 0;
+        document.getElementById('qdTodayPhone').textContent = '¥' + ((data.phone_sales||0)).toLocaleString();
+        document.getElementById('qdTodayCommission').textContent = '¥' + ((data.total_commission||0)).toLocaleString();
+    } catch(e) {}
+}
+
+function qdToast(msg) {
+    const t = document.createElement('div');
+    t.className = 'qd-toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2500);
+}
+</script>
+<script src="/js/ai-assistant.js?v=3.0"></script>
+</body>
+</html>

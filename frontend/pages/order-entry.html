@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>快速成交 — 三星运营管理平台</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.page-layout { display: grid; grid-template-columns: 1fr 380px; gap: 20px; max-width: 1200px; margin: 0 auto; }
+.order-card { background: #fff; border-radius: 12px; padding: 24px; border: 1px solid var(--gray-200); }
+.stats-panel { background: #fff; border-radius: 12px; padding: 24px; border: 1px solid var(--gray-200); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.form-row.single { grid-template-columns: 1fr; }
+.form-group { display: flex; flex-direction: column; }
+.form-group label { font-size: 13px; font-weight: 500; color: var(--gray-600); margin-bottom: 6px; }
+.form-group label .required { color: var(--danger); }
+.form-group input, .form-group select { padding: 10px 12px; border: 1px solid var(--gray-300); border-radius: 8px; font-size: 14px; transition: border-color .2s; font-family: inherit; }
+.form-group input:focus, .form-group select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(20,40,160,.1); }
+.form-group .hint { font-size: 11px; color: var(--gray-400); margin-top: 4px; }
+.btn { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: all .2s; }
+.btn-primary { background: var(--primary); color: #fff; font-size: 16px; padding: 14px 32px; }
+.btn-primary:hover { background: var(--primary-light); transform: translateY(-1px); }
+.btn-primary:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+.submit-row { text-align: center; margin-top: 8px; }
+.success-toast { position: fixed; top: 20px; right: 20px; background: var(--success); color: #fff; padding: 16px 24px; border-radius: 10px; font-weight: 500; z-index: 9999; animation: slideIn .3s ease; box-shadow: var(--shadow-lg); }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.stat-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--gray-100); font-size: 14px; }
+.stat-item:last-child { border-bottom: none; }
+.stat-value { font-weight: 600; }
+.stat-label { color: var(--gray-500); }
+.order-list { max-height: 500px; overflow-y: auto; margin-top: 16px; }
+.order-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--gray-100); font-size: 13px; }
+.order-item:last-child { border-bottom: none; }
+.order-time { color: var(--gray-400); font-size: 12px; margin-right: 8px; }
+.order-model { font-weight: 500; }
+.order-price { color: var(--primary); font-weight: 600; }
+.order-staff { color: var(--gray-500); font-size: 12px; }
+.loading-spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--gray-200); border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.member-info { background: var(--primary-bg); padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-top: 6px; }
+.member-info .name { font-weight: 500; color: var(--primary); }
+.member-info .new { color: var(--success); font-weight: 500; }
+.quick-actions { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+.quick-actions .btn-small { padding: 6px 12px; font-size: 12px; border-radius: 6px; background: var(--gray-100); border: 1px solid var(--gray-200); cursor: pointer; }
+.quick-actions .btn-small:hover { background: var(--primary-bg); border-color: var(--primary); }
+@media (max-width: 900px) {
+    .page-layout { grid-template-columns: 1fr; }
+    .form-row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app-layout">
+    <aside id="sidebar" class="sidebar"></aside>
+    <main class="main-content">
+        <div class="page-header">
+            <h1>🧾 快速成交</h1>
+            <small class="text-muted">每笔订单 30 秒极速录入，挂单即算提成</small>
+        </div>
+        <div class="page-layout" id="app">
+            <!-- 左侧：成交表单 -->
+            <div class="order-card">
+                <h3 style="margin-bottom:20px;font-size:16px;color:var(--gray-800)">📝 录入成交订单</h3>
+                <form id="orderForm" onsubmit="submitOrder(event)">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>客户手机号</label>
+                            <input type="tel" id="memberPhone" placeholder="输入手机号自动匹配会员" maxlength="11" onblur="lookupMember()">
+                            <div class="hint">输完后自动匹配，新客户自动创建会员档案</div>
+                            <div id="memberPreview" style="display:none"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>新客户姓名 <small style="color:var(--gray-400)">(已有会员无需填写)</small></label>
+                            <input type="text" id="memberName" placeholder="选填">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><span class="required">*</span> 选择机型</label>
+                            <select id="modelSelect" onchange="onModelChange()">
+                                <option value="">-- 请选择机型 --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>型号代码 <small>(可手动输入)</small></label>
+                            <input type="text" id="modelCode" placeholder="如 SM-S9380" oninput="onModelManual()">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>产品名称</label>
+                            <input type="text" id="productName" placeholder="自动填充">
+                        </div>
+                        <div class="form-group">
+                            <label>规格</label>
+                            <input type="text" id="spec" placeholder="如 12+512GB">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>颜色</label>
+                            <input type="text" id="color" placeholder="选填">
+                        </div>
+                        <div class="form-group">
+                            <label><span class="required">*</span> 成交金额 (元)</label>
+                            <input type="number" id="actualPrice" placeholder="实际成交价" step="0.01" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>IMEI/串号</label>
+                            <input type="text" id="imei" placeholder="手机串号，选填">
+                        </div>
+                        <div class="form-group">
+                            <label><span class="required">*</span> 成交店员</label>
+                            <select id="staffSelect"></select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>成交门店</label>
+                            <select id="storeSelect" onchange="onStoreChange()"></select>
+                        </div>
+                    </div>
+
+                    <!-- 以旧换新 -->
+                    <details style="margin-top:8px;cursor:pointer;">
+                        <summary style="font-size:13px;color:var(--gray-500);padding:4px 0;">♻ 以旧换新 (点击展开)</summary>
+                        <div class="form-row" style="margin-top:8px;">
+                            <div class="form-group">
+                                <label>旧机型号</label>
+                                <input type="text" id="tradeInModel" placeholder="如 iPhone 13">
+                            </div>
+                            <div class="form-group">
+                                <label>折价金额 (元)</label>
+                                <input type="number" id="tradeInAmount" placeholder="0" step="0.01">
+                            </div>
+                        </div>
+                    </details>
+
+                    <div class="submit-row">
+                        <button type="submit" class="btn btn-primary" id="submitBtn">✅ 确认成交</button>
+                    </div>
+                </form>
+
+                <!-- 今日已录订单 -->
+                <div style="margin-top:32px;">
+                    <h3 style="margin-bottom:12px;font-size:15px;color:var(--gray-700)">📋 今日录入记录</h3>
+                    <div id="todayOrders" class="order-list">
+                        <div style="text-align:center;color:var(--gray-400);padding:20px;">加载中...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：今日汇总 + 店员排行 -->
+            <div class="stats-panel">
+                <h3 style="margin-bottom:16px;font-size:15px;color:var(--gray-700)">📊 今日汇总</h3>
+                <div id="todayStats">
+                    <div class="stat-item"><span class="stat-label">今日订单</span><span class="stat-value" id="statOrders">--</span></div>
+                    <div class="stat-item"><span class="stat-label">手机销量</span><span class="stat-value" id="statPhoneQty">--</span></div>
+                    <div class="stat-item"><span class="stat-label">手机销售额</span><span class="stat-value" id="statPhoneSales">--</span></div>
+                    <div class="stat-item"><span class="stat-label">NCME 销售额</span><span class="stat-value" id="statNcme">--</span></div>
+                    <div class="stat-item"><span class="stat-label">配件销售额</span><span class="stat-value" id="statAcc">--</span></div>
+                    <div class="stat-item"><span class="stat-label">以旧换新</span><span class="stat-value" id="statTrade">--</span></div>
+                </div>
+
+                <h3 style="margin:24px 0 12px;font-size:15px;color:var(--gray-700)">🏆 本月店员排行</h3>
+                <div id="staffRanking">
+                    <div style="text-align:center;color:var(--gray-400);padding:20px;">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <div class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰</div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+const API = App.api.bind(App);
+let modelCatalog = [];
+let currentUser = null;
+
+// 初始化
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.init()) return;
+    currentUser = App.user;
+    App.renderSidebar('order-entry');
+    await loadModelCatalog();
+    await loadStaffList();
+    await loadStoreList();
+    await refreshAll();
+});
+
+// 加载机型目录
+async function loadModelCatalog() {
+    try {
+        const data = await API('orders/model-catalog');
+        modelCatalog = data || [];
+        const select = document.getElementById('modelSelect');
+        select.innerHTML = '<option value="">-- 请选择机型 --</option>' +
+            modelCatalog.map(m => `<option value="${m.model_code}" data-spec="${m.spec}" data-price="${m.suggested_price}" data-name="${m.name}">${m.model_code} — ${m.spec}</option>`).join('');
+    } catch(e) { console.error('加载机型失败:', e); }
+}
+
+// 加载店员列表
+async function loadStaffList() {
+    try {
+        const data = await API('staff/list');
+        const select = document.getElementById('staffSelect');
+        select.innerHTML = data.map(s => {
+            // 尝试匹配当前用户为默认店员
+            const isDefault = s.name === currentUser?.display_name;
+            return `<option value="${s.id}" ${isDefault ? 'selected' : ''}>${s.name} — ${s.store_name}${isDefault ? ' (我)' : ''}</option>`;
+        }).join('');
+    } catch(e) {
+        try {
+            // staff表可能为空，尝试用 users 表
+            const users = await API('member/list');
+            // fallback: use a generic store list
+        } catch(e2) {}
+    }
+}
+
+// 加载门店列表
+async function loadStoreList() {
+    try {
+        const data = await API('sales/stores');
+        const select = document.getElementById('storeSelect');
+        let userStoreId = currentUser?.store_id;
+        select.innerHTML = data.map(s => {
+            const sel = (userStoreId && s.id == userStoreId) ? 'selected' : '';
+            return `<option value="${s.id}" ${sel}>${s.name}</option>`;
+        }).join('');
+    } catch(e) {}
+}
+
+function getSelectedStoreId() {
+    const sel = document.getElementById('storeSelect');
+    if (sel && sel.value) return parseInt(sel.value);
+    return currentUser?.store_id || 1;
+}
+
+// 选择机型时自动填充
+function onModelChange() {
+    const sel = document.getElementById('modelSelect');
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) return;
+    document.getElementById('modelCode').value = opt.value;
+    document.getElementById('productName').value = opt.dataset.spec || '';
+    if (opt.dataset.price && opt.dataset.price > 0) {
+        document.getElementById('actualPrice').value = opt.dataset.price;
+    }
+}
+
+// 手动输入型号代码
+function onModelManual() {
+    const code = document.getElementById('modelCode').value.trim();
+    if (!code) return;
+    const match = modelCatalog.find(m => m.model_code.toUpperCase() === code.toUpperCase());
+    if (match) {
+        document.getElementById('productName').value = match.spec || '';
+        if (match.suggested_price > 0 && !document.getElementById('actualPrice').value) {
+            document.getElementById('actualPrice').value = match.suggested_price;
+        }
+    }
+}
+
+// 门店切换时刷新店员列表
+function onStoreChange() { loadStaffList(); }
+
+// 手机号查会员
+async function lookupMember() {
+    const phone = document.getElementById('memberPhone').value.trim();
+    if (phone.length < 11) return;
+    const preview = document.getElementById('memberPreview');
+    try {
+        const data = await API(`member/list?search=${phone}&limit=1`);
+        if (data && data.length > 0) {
+            const m = data[0];
+            preview.style.display = 'block';
+            preview.innerHTML = `<div class="member-info">✅ 老客户：<span class="name">${m.name}</span> | 等级：${m.level} | 累计消费 ¥${(m.total_spent||0).toLocaleString()}</div>`;
+        } else {
+            preview.style.display = 'block';
+            preview.innerHTML = `<div class="member-info"><span class="new">🆕 新客户</span> — 成交后将自动创建会员档案</div>`;
+        }
+    } catch(e) {
+        preview.style.display = 'block';
+        preview.innerHTML = `<div class="member-info"><span class="new">🆕 新客户</span> — 成交后将自动创建会员档案</div>`;
+    }
+}
+
+// 提交订单
+async function submitOrder(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    const storeId = getSelectedStoreId();
+    const staffId = parseInt(document.getElementById('staffSelect').value);
+    const modelCode = document.getElementById('modelCode').value.trim();
+    const actualPrice = parseFloat(document.getElementById('actualPrice').value);
+
+    if (!modelCode) return alert('请选择或输入机型');
+    if (!actualPrice || actualPrice <= 0) return alert('请输入有效的成交金额');
+    if (!staffId) return alert('请选择成交店员');
+    if (!storeId) return alert('请选择门店');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading-spinner"></span>提交中...';
+
+    try {
+        const body = {
+            store_id: storeId,
+            staff_id: staffId,
+            model_code: modelCode,
+            product_name: document.getElementById('productName').value.trim(),
+            spec: document.getElementById('spec').value.trim(),
+            color: document.getElementById('color').value.trim(),
+            imei: document.getElementById('imei').value.trim(),
+            original_price: parseFloat(document.getElementById('modelSelect').selectedOptions[0]?.dataset?.price || 0),
+            actual_price: actualPrice,
+            member_phone: document.getElementById('memberPhone').value.trim(),
+            member_name: document.getElementById('memberName').value.trim(),
+            trade_in_model: document.getElementById('tradeInModel').value.trim(),
+            trade_in_amount: parseFloat(document.getElementById('tradeInAmount').value || 0),
+        };
+
+        const result = await API('orders/create', { method: 'POST', body });
+        showToast(`✅ 成交！${result.message}`);
+        resetForm();
+        await refreshAll();
+    } catch(e) {
+        alert('提交失败: ' + (e.message || '未知错误'));
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '✅ 确认成交';
+    }
+}
+
+function resetForm() {
+    document.getElementById('memberPhone').value = '';
+    document.getElementById('memberName').value = '';
+    document.getElementById('modelSelect').selectedIndex = 0;
+    document.getElementById('modelCode').value = '';
+    document.getElementById('productName').value = '';
+    document.getElementById('spec').value = '';
+    document.getElementById('color').value = '';
+    document.getElementById('imei').value = '';
+    document.getElementById('actualPrice').value = '';
+    document.getElementById('tradeInModel').value = '';
+    document.getElementById('tradeInAmount').value = '';
+    document.getElementById('memberPreview').style.display = 'none';
+}
+
+// 刷新所有数据
+async function refreshAll() {
+    await Promise.all([loadTodayStats(), loadStaffRanking(), loadTodayOrders()]);
+}
+
+// 加载今日汇总
+async function loadTodayStats() {
+    const storeId = getSelectedStoreId();
+    try {
+        const data = await API(`orders/today?store_id=${storeId}`);
+        document.getElementById('statOrders').textContent = data.total_orders || 0;
+        document.getElementById('statPhoneQty').textContent = data.phone_qty || 0;
+        document.getElementById('statPhoneSales').textContent = '¥' + ((data.phone_sales||0)).toLocaleString();
+        document.getElementById('statNcme').textContent = '¥' + ((data.ncme_sales||0)).toLocaleString();
+        document.getElementById('statAcc').textContent = '¥' + ((data.accessory_sales||0)).toLocaleString();
+        document.getElementById('statTrade').textContent = (data.trade_in_qty||0) + '台 / ¥' + ((data.trade_in_total||0)).toLocaleString();
+    } catch(e) {}
+}
+
+// 加载店员排行
+async function loadStaffRanking() {
+    const storeId = getSelectedStoreId();
+    try {
+        const data = await API(`orders/staff-ranking?store_id=${storeId}&limit=10`);
+        const container = document.getElementById('staffRanking');
+        if (!data || data.length === 0) {
+            container.innerHTML = '<div style="text-align:center;color:var(--gray-400);padding:20px;">暂无数据，快去录入第一单吧！</div>';
+            return;
+        }
+        container.innerHTML = data.map((s, i) => {
+            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}`;
+            return `<div class="stat-item">
+                <span>${medal} ${s.name} <small style="color:var(--gray-400)">${s.store_name}</small></span>
+                <span>${s.phone_qty||0}台 ¥${(s.phone_sales||0).toLocaleString()} <small style="color:var(--success)">提成¥${(s.estimated_commission||0)}</small></span>
+            </div>`;
+        }).join('');
+    } catch(e) {}
+}
+
+// 加载今日订单
+async function loadTodayOrders() {
+    const storeId = getSelectedStoreId();
+    try {
+        const data = await API(`orders/list?store_id=${storeId}&limit=30`);
+        const container = document.getElementById('todayOrders');
+        if (!data || !data.list || data.list.length === 0) {
+            container.innerHTML = '<div style="text-align:center;color:var(--gray-400);padding:20px;">今天还没有订单</div>';
+            return;
+        }
+        container.innerHTML = data.list.map(o => `
+            <div class="order-item">
+                <div>
+                    <span class="order-time">${o.order_time?.substring(0,5) || ''}</span>
+                    <span class="order-model">${o.product_name || o.model_code}</span>
+                    <span class="order-staff"> — ${o.staff_name}</span>
+                </div>
+                <span class="order-price">¥${(o.actual_price||0).toLocaleString()}</span>
+            </div>
+        `).join('');
+    } catch(e) {}
+}
+
+function showToast(msg) {
+    const toast = document.createElement('div');
+    toast.className = 'success-toast';
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
+}
+</script>
+</body>
+</html>

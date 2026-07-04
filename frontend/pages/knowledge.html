@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1428a0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="三星管理">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <title>店长百事通 - 三星事业部</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main-content">
+        <div class="topbar" id="topbar"></div>
+        <div class="page-content">
+            <!-- 搜索栏 -->
+            <div class="card mb-4">
+                <div class="card-body" style="padding:16px 20px;">
+                    <div style="display:flex; gap:12px; align-items:center;">
+                        <input type="text" id="searchInput" placeholder="搜索知识库..." style="flex:1; padding:10px 16px; border:1px solid var(--gray-200); border-radius:var(--radius); font-size:14px;">
+                        <button class="btn btn-primary" onclick="doSearch()" style="width:auto;">搜索</button>
+                        <button class="btn" id="btnManage" style="width:auto; background:white; border:1px solid var(--gray-200);" onclick="toggleManageMode()">管理</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分类标签 -->
+            <div id="categoryTabs" style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;">
+                <div class="loading-spinner">加载中</div>
+            </div>
+
+            <!-- 内容区 -->
+            <div style="display:grid; grid-template-columns: 300px 1fr; gap:16px;">
+                <!-- 文章列表 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>文章列表</h3>
+                        <button class="btn btn-primary" id="btnNewArticle" style="display:none; padding:4px 12px; font-size:12px;" onclick="showArticleModal()">+ 新增</button>
+                    </div>
+                    <div class="card-body" style="max-height:600px; overflow-y:auto;" id="articleList">
+                        <div class="loading-spinner">加载中</div>
+                    </div>
+                </div>
+                <!-- 文章详情 -->
+                <div class="card">
+                    <div class="card-header" id="articleHeader">
+                        <h3 id="articleTitle">选择左侧文章查看</h3>
+                        <div id="articleActions" style="display:none; gap:4px;">
+                            <button class="action-btn" id="btnEditArticle" onclick="editCurrentArticle()">编辑</button>
+                            <button class="action-btn danger" id="btnDeleteArticle" onclick="deleteCurrentArticle()">删除</button>
+                        </div>
+                    </div>
+                    <div class="card-body" id="articleContent">
+                        <p style="color:var(--gray-400); text-align:center; padding:40px;">请从左侧选择一篇文章</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3 id="modalTitle">标题</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+    </div>
+</div>
+
+<style>
+    .action-btn { font-size:12px; color:var(--primary); border:none; background:none; cursor:pointer; padding:4px 8px; border-radius:4px; }
+    .action-btn:hover { background:var(--primary); color:white; }
+    .action-btn.danger { color:var(--danger); }
+    .action-btn.danger:hover { background:var(--danger); color:white; }
+    .form-row { margin-bottom:14px; }
+    .form-row label { display:block; font-size:13px; font-weight:600; margin-bottom:4px; color:var(--gray-700); }
+    .form-row input, .form-row select, .form-row textarea { width:100%; padding:8px 12px; border:1px solid var(--gray-200); border-radius:var(--radius); font-size:14px; box-sizing:border-box; }
+    .form-row textarea { min-height:200px; resize:vertical; font-family:inherit; line-height:1.8; }
+    .article-item { padding:12px 0; border-bottom:1px solid var(--gray-100); cursor:pointer; transition:all .15s; }
+    .article-item:hover { background:rgba(20,40,160,0.03); margin:0 -12px; padding:12px; border-radius:6px; }
+    .article-item.active { background:rgba(20,40,160,0.06); margin:0 -12px; padding:12px; border-radius:6px; border-left:3px solid var(--primary); }
+    .content-body { font-size:14px; line-height:2; white-space:pre-wrap; word-break:break-word; }
+    .content-meta { font-size:12px; color:var(--gray-400); margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--gray-100); }
+</style>
+
+<script src="/js/app.js"></script>
+<script>
+let currentCategory = null;
+let currentArticleId = null;
+let manageMode = false;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.init()) return;
+    App.renderSidebar('knowledge');
+    App.renderTopbar('店长百事通');
+    // 管理员显示管理按钮
+    if (App.user?.role === 'admin') {
+        document.getElementById('btnManage').style.display = '';
+    }
+    await loadCategories();
+});
+
+async function loadCategories() {
+    try {
+        const data = await App.api(`/knowledge/categories?token=${App.token}`);
+        const tabs = document.getElementById('categoryTabs');
+        tabs.innerHTML = `
+            <button class="btn ${currentCategory === null ? 'btn-primary' : ''}" style="padding:8px 16px; font-size:13px; cursor:pointer; border-radius:20px; background:${currentCategory === null ? 'var(--primary)' : 'white'}; color:${currentCategory === null ? 'white' : 'var(--gray-700)'}; border:1px solid var(--gray-200);"
+                onclick="selectCategory(null)">全部</button>
+            ${data.map(c => `
+                <button class="btn" style="padding:8px 16px; font-size:13px; cursor:pointer; border-radius:20px; background:${currentCategory === c.id ? 'var(--primary)' : 'white'}; color:${currentCategory === c.id ? 'white' : 'var(--gray-700)'}; border:1px solid var(--gray-200);"
+                    onclick="selectCategory(${c.id})">
+                    ${c.icon || ''} ${c.name} <small style="opacity:.6;">(${c.article_count})</small>
+                </button>
+            `).join('')}
+        `;
+        if (!currentCategory && data.length > 0) {
+            // 不自动选第一个，显示全部
+        }
+        await loadArticles();
+    } catch(e) { console.error(e); }
+}
+
+async function selectCategory(catId) {
+    currentCategory = catId;
+    currentArticleId = null;
+    await loadCategories();
+    await loadArticles();
+}
+
+async function loadArticles() {
+    try {
+        let url = `/knowledge/articles?token=${App.token}`;
+        if (currentCategory) url += `&category_id=${currentCategory}`;
+        const data = await App.api(url);
+        document.getElementById('articleList').innerHTML = data.length > 0
+            ? data.map(a => `
+                <div class="article-item ${currentArticleId === a.id ? 'active' : ''}" onclick="loadArticle(${a.id})">
+                    <div style="font-size:14px; font-weight:600;">${a.title}</div>
+                    <div style="font-size:11px; color:var(--gray-400); margin-top:4px; display:flex; gap:12px;">
+                        <span>浏览 ${a.views || 0}</span>
+                        <span>${(a.updated_at || a.created_at || '').substring(0,10)}</span>
+                    </div>
+                </div>
+            `).join('')
+            : '<p style="color:var(--gray-400); text-align:center; padding:20px;">暂无文章</p>';
+    } catch(e) {}
+}
+
+async function loadArticle(articleId) {
+    try {
+        currentArticleId = articleId;
+        const a = await App.api(`/knowledge/article/${articleId}?token=${App.token}`);
+        document.getElementById('articleTitle').textContent = a.title;
+        document.getElementById('articleContent').innerHTML = `
+            <div class="content-meta">更新于 ${a.updated_at?.substring(0,16) || a.created_at?.substring(0,16) || ''} · ${a.views} 次浏览</div>
+            <div class="content-body">${escapeHtml(a.content)}</div>
+        `;
+        document.getElementById('articleActions').style.display = manageMode ? 'flex' : 'none';
+        // 刷新列表高亮
+        await loadArticles();
+    } catch(e) {}
+}
+
+async function doSearch() {
+    const kw = document.getElementById('searchInput').value.trim();
+    if (!kw) return;
+    try {
+        const data = await App.api(`/knowledge/articles?keyword=${encodeURIComponent(kw)}&token=${App.token}`);
+        currentCategory = null;
+        document.getElementById('categoryTabs').innerHTML = `<span style="font-size:13px; color:var(--gray-600);">搜索"${escapeHtml(kw)}" — 找到 ${data.length} 条结果</span>`;
+        document.getElementById('articleList').innerHTML = data.map(a => `
+            <div class="article-item" onclick="loadArticle(${a.id})">
+                <div style="font-size:14px; font-weight:600;">${a.title}</div>
+            </div>
+        `).join('');
+    } catch(e) {}
+}
+document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+function toggleManageMode() {
+    manageMode = !manageMode;
+    document.getElementById('btnManage').textContent = manageMode ? '退出管理' : '管理';
+    document.getElementById('btnManage').style.background = manageMode ? 'var(--primary)' : 'white';
+    document.getElementById('btnManage').style.color = manageMode ? 'white' : 'var(--gray-700)';
+    document.getElementById('btnNewArticle').style.display = manageMode ? '' : 'none';
+    document.getElementById('articleActions').style.display = (manageMode && currentArticleId) ? 'flex' : 'none';
+}
+
+function showArticleModal(articleId) {
+    const isEdit = !!articleId;
+    showModal(isEdit ? '编辑文章' : '新增文章', `
+        <div class="form-row"><label>标题</label><input type="text" id="ma_title"></div>
+        <div class="form-row"><label>内容</label><textarea id="ma_content"></textarea></div>
+        <div style="text-align:right; margin-top:16px;">
+            <button class="btn" style="margin-right:8px;" onclick="closeModal()">取消</button>
+            <button class="btn btn-primary" onclick="doSaveArticle(${articleId || 'null'})">${isEdit ? '保存' : '创建'}</button>
+        </div>
+    `);
+    if (isEdit && currentArticleId) {
+        App.api(`/knowledge/article/${currentArticleId}?token=${App.token}`).then(a => {
+            document.getElementById('ma_title').value = a.title;
+            document.getElementById('ma_content').value = a.content;
+        });
+    }
+}
+
+function editCurrentArticle() { showArticleModal(currentArticleId); }
+
+async function doSaveArticle(articleId) {
+    const title = document.getElementById('ma_title').value.trim();
+    const content = document.getElementById('ma_content').value.trim();
+    if (!title || !content) { App.toast('请填写标题和内容', 'error'); return; }
+    try {
+        if (articleId) {
+            await App.api(`/knowledge/article/${articleId}?token=${App.token}`, { method:'PUT', body:{ title, content }});
+        } else {
+            await App.api(`/knowledge/articles?token=${App.token}`, { method:'POST', body:{ title, content, category_id: currentCategory }});
+        }
+        App.toast(articleId ? '已更新' : '已创建', 'success');
+        closeModal();
+        await loadCategories();
+        await loadArticles();
+    } catch(e) { App.toast(e.message || '保存失败', 'error'); }
+}
+
+async function deleteCurrentArticle() {
+    if (!currentArticleId || !confirm('确定删除这篇文章？')) return;
+    try {
+        await App.api(`/knowledge/article/${currentArticleId}?token=${App.token}`, { method:'DELETE' });
+        App.toast('已删除', 'success');
+        currentArticleId = null;
+        document.getElementById('articleTitle').textContent = '选择左侧文章查看';
+        document.getElementById('articleContent').innerHTML = '<p style="color:var(--gray-400); text-align:center; padding:40px;">请从左侧选择一篇文章</p>';
+        document.getElementById('articleActions').style.display = 'none';
+        await loadCategories();
+        await loadArticles();
+    } catch(e) { App.toast('删除失败', 'error'); }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showModal(title, bodyHtml) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalBody').innerHTML = bodyHtml;
+    document.getElementById('modalOverlay').classList.add('show');
+}
+function closeModal(e) {
+    if (e && e.target !== document.getElementById('modalOverlay')) return;
+    document.getElementById('modalOverlay').classList.remove('show');
+}
+</script>
+<script src="/js/ai-assistant.js?v=3.0"></script>
+</body>
+</html>

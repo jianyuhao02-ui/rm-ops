@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1428a0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="三星管理">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <title>库存监控 - 三星事业部</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        /* ── 库存看板专属样式 ── */
+        :root {
+            --inv-ok: #10b981;
+            --inv-ok-bg: #ecfdf5;
+            --inv-warn: #f59e0b;
+            --inv-warn-bg: #fffbeb;
+            --inv-danger: #ef4444;
+            --inv-danger-bg: #fef2f2;
+            --inv-blue: #3b82f6;
+            --inv-blue-bg: #eff6ff;
+        }
+
+        /* 系列概览条 */
+        .series-overview-bar {
+            display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, var(--card-bg, #fff) 0%, rgba(59,130,246,0.03) 100%);
+            border-radius: 10px; border: 1px solid var(--border-color, #e5e7eb);
+            margin-bottom: 12px;
+            transition: all 0.2s;
+        }
+        .series-overview-bar:hover {
+            border-color: var(--inv-blue);
+            box-shadow: 0 2px 8px rgba(59,130,246,0.08);
+        }
+        .series-overview-bar .so-icon {
+            width: 42px; height: 42px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; font-weight: 700; color: #fff;
+            flex-shrink: 0;
+        }
+        .series-overview-bar .so-icon.s26 { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .series-overview-bar .so-icon.fold { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+        .series-overview-bar .so-icon.flip { background: linear-gradient(135deg, #ec4899, #db2777); }
+        .series-overview-bar .so-icon.w26 { background: linear-gradient(135deg, #1e293b, #0f172a); }
+        .series-overview-bar .so-info { flex:1; min-width: 120px; }
+        .series-overview-bar .so-info h4 { font-size: 15px; margin:0; color: var(--text-primary, #111); }
+        .series-overview-bar .so-info small { color: var(--text-tertiary, #9ca3af); font-size: 12px; }
+        .series-overview-bar .so-metrics {
+            display: flex; gap: 18px; flex-wrap: wrap;
+        }
+        .so-metric {
+            text-align: center; min-width: 52px;
+        }
+        .so-metric .val {
+            font-size: 18px; font-weight: 700;
+            color: var(--text-primary, #111);
+        }
+        .so-metric .val.danger { color: var(--inv-danger); }
+        .so-metric .val.warn { color: var(--inv-warn); }
+        .so-metric .val.ok { color: var(--inv-ok); }
+        .so-metric .lbl { font-size: 11px; color: var(--text-tertiary, #9ca3af); }
+
+        /* 筛选栏 */
+        .filter-bar {
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            margin-bottom: 16px; padding: 12px 0;
+            border-bottom: 1px solid var(--border-color, #e5e7eb);
+        }
+        .filter-bar label { font-size: 13px; color: var(--text-secondary, #6b7280); font-weight: 500; }
+        .filter-bar select {
+            padding: 6px 28px 6px 10px; font-size: 13px;
+            border: 1px solid var(--border-color, #d1d5db); border-radius: 6px;
+            background: var(--card-bg, #fff);
+            color: var(--text-primary, #111);
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7280'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 10px center;
+        }
+        .filter-bar .filter-pills {
+            display: flex; gap: 4px;
+        }
+        .filter-pill {
+            padding: 5px 14px; border-radius: 20px; font-size: 12px;
+            border: 1px solid var(--border-color, #d1d5db);
+            background: var(--card-bg, #fff);
+            color: var(--text-secondary, #6b7280);
+            cursor: pointer; transition: all 0.15s;
+            user-select: none;
+        }
+        .filter-pill:hover { border-color: var(--inv-blue); color: var(--inv-blue); }
+        .filter-pill.active {
+            background: var(--inv-blue); color: #fff; border-color: var(--inv-blue);
+            font-weight: 600;
+        }
+        .filter-pill .count { font-size: 10px; margin-left: 2px; opacity: 0.8; }
+
+        /* 缺货色块矩阵 */
+        .stock-matrix {
+            display: grid; gap: 4px;
+            grid-template-columns: repeat(auto-fill, minmax(14px, 1fr));
+            max-width: 100%;
+        }
+        .stock-matrix .cell {
+            aspect-ratio: 1; border-radius: 3px; cursor: pointer;
+            transition: transform 0.15s;
+            position: relative;
+        }
+        .stock-matrix .cell:hover {
+            transform: scale(1.5); z-index: 10;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        .stock-matrix .cell.qty-0 { background: #fca5a5; }
+        .stock-matrix .cell.qty-low { background: #fcd34d; }
+        .stock-matrix .cell.qty-ok { background: #6ee7b7; }
+        .stock-matrix .cell.qty-high { background: #34d399; }
+
+        .matrix-tooltip {
+            display: none; position: absolute; bottom: calc(100% + 8px);
+            left: 50%; transform: translateX(-50%);
+            background: #1e293b; color: #fff; font-size: 11px;
+            padding: 6px 10px; border-radius: 6px; white-space: nowrap;
+            pointer-events: none; z-index: 999;
+        }
+        .matrix-tooltip::after {
+            content: ''; position: absolute; top: 100%; left: 50%;
+            transform: translateX(-50%); border: 5px solid transparent;
+            border-top-color: #1e293b;
+        }
+        .stock-matrix .cell:hover .matrix-tooltip { display: block; }
+
+        /* 趋势面板 */
+        .trend-panel { margin-bottom: 16px; }
+        .trend-chart {
+            display: flex; align-items: flex-end; gap: 3px;
+            height: 80px; padding: 4px 0;
+        }
+        .trend-chart .bar {
+            flex: 1; min-width: 6px; border-radius: 3px 3px 0 0;
+            background: linear-gradient(to top, var(--inv-blue), #93c5fd);
+            transition: height 0.3s;
+        }
+        .trend-chart .bar:hover { opacity: 0.75; }
+        .suggestion-card {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 10px 14px; border-radius: 8px; font-size: 13px;
+            margin-top: 8px;
+        }
+        .suggestion-card.urgent {
+            background: var(--inv-danger-bg); color: var(--inv-danger);
+            border-left: 3px solid var(--inv-danger);
+        }
+        .suggestion-card.warning {
+            background: var(--inv-warn-bg); color: #92400e;
+            border-left: 3px solid var(--inv-warn);
+        }
+        .suggestion-card.notice {
+            background: var(--inv-blue-bg); color: #1e40af;
+            border-left: 3px solid var(--inv-blue);
+        }
+        .suggestion-card.ok {
+            background: var(--inv-ok-bg); color: #065f46;
+            border-left: 3px solid var(--inv-ok);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .series-overview-bar { flex-direction: column; align-items: flex-start; gap: 10px; }
+            .series-overview-bar .so-metrics { width: 100%; justify-content: space-between; }
+            .so-metric .val { font-size: 15px; }
+            .filter-bar { gap: 8px; }
+            .trend-chart { height: 60px; }
+        }
+    </style>
+</head>
+<body>
+<div class="app-layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main-content">
+        <div class="topbar" id="topbar"></div>
+        <div class="page-content">
+            <!-- ═══ 统计卡片（增强版） ═══ -->
+            <div class="stats-grid" id="invStats">
+                <div class="stat-card"><div class="stat-icon blue">📦</div><div class="stat-info"><h4 id="totalItems">--</h4><p>SKU数量</p></div></div>
+                <div class="stat-card"><div class="stat-icon green">🏪</div><div class="stat-info"><h4 id="activeStores">--</h4><p>有库存门店</p></div></div>
+                <div class="stat-card"><div class="stat-icon red">🚫</div><div class="stat-info"><h4 id="outOfStock">--</h4><p>缺货SKU</p></div></div>
+                <div class="stat-card"><div class="stat-icon orange">⚠️</div><div class="stat-info"><h4 id="alertCount">--</h4><p>库存预警</p></div></div>
+                <div class="stat-card"><div class="stat-icon teal">🔄</div><div class="stat-info"><h4 id="turnoverDays">--</h4><p>周转天数</p></div></div>
+                <div class="stat-card"><div class="stat-icon purple">📊</div><div class="stat-info"><h4 id="lastUpdate">--</h4><p>最近更新</p></div></div>
+            </div>
+
+            <!-- ═══ 上传区域 ═══ -->
+            <div class="card" style="margin-bottom:16px;">
+                <div class="card-header">
+                    <h3>📤 导入库存数据</h3>
+                    <small style="color:var(--gray-400);">上传 eBoss 库存汇总 .xls 文件</small>
+                </div>
+                <div class="card-body">
+                    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <label class="btn btn-primary" style="cursor:pointer;">
+                            📁 选择文件
+                            <input type="file" id="inventoryFile" accept=".xls,.xlsx" style="display:none;" onchange="onFileSelected(this)">
+                        </label>
+                        <span id="fileName" style="color:var(--gray-400); font-size:13px;">未选择文件</span>
+                        <button class="btn btn-primary" id="uploadBtn" onclick="uploadInventory()" disabled style="opacity:0.5;">
+                            ⬆️ 上传并导入
+                        </button>
+                        <span id="uploadStatus" style="font-size:13px;"></span>
+                    </div>
+                    <div id="uploadResult" style="margin-top:12px;"></div>
+                </div>
+            </div>
+
+            <!-- ═══ 库存预警 ═══ -->
+            <div class="card" style="margin-bottom:16px;">
+                <div class="card-header">
+                    <h3>🚨 库存预警</h3>
+                    <button class="btn" style="padding:6px 12px; font-size:12px; background:var(--gray-100);" onclick="loadAlerts()">刷新</button>
+                </div>
+                <div class="card-body" id="alertList"><div class="loading-spinner">加载中...</div></div>
+            </div>
+
+            <!-- ═══ 智能补货建议（新增） ═══ -->
+            <div id="restockPanel" style="margin-bottom:16px;">
+                <div class="card">
+                    <div class="card-header"><h3>🧠 智能补货建议</h3></div>
+                    <div class="card-body" id="restockContent"><div class="loading-spinner">分析中...</div></div>
+                </div>
+            </div>
+
+            <!-- ═══ 筛选栏（新增） ═══ -->
+            <div class="filter-bar" id="filterBar" style="display:none;">
+                <label>🏪 门店：</label>
+                <select id="filterStore" onchange="applyFilters()">
+                    <option value="">全部门店</option>
+                </select>
+                <label>状态：</label>
+                <div class="filter-pills" id="filterPills">
+                    <span class="filter-pill active" data-status="all" onclick="setFilterStatus('all', this)">全部</span>
+                    <span class="filter-pill" data-status="ok" onclick="setFilterStatus('ok', this)">✅ 正常</span>
+                    <span class="filter-pill" data-status="warning" onclick="setFilterStatus('warning', this)">⚠️ 不足</span>
+                    <span class="filter-pill" data-status="danger" onclick="setFilterStatus('danger', this)">🚫 缺货</span>
+                </div>
+                <span id="filterCount" style="font-size:12px; color:var(--gray-400); margin-left:auto;"></span>
+            </div>
+
+            <!-- ═══ 四系列看板（重构） ═══ -->
+            <div id="heatmaps"></div>
+        </div>
+    </div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+// ─── 全局状态 ───
+const SERIES_META = {
+    'S26':   { name: 'Galaxy S26系列',  icon: 'S26', cls: 's26',  emoji: '📱' },
+    'FOLD7': { name: 'Galaxy Z Fold7',  icon: 'F7',  cls: 'fold', emoji: '📖' },
+    'FLIP7': { name: 'Galaxy Z Flip7',  icon: 'Z7',  cls: 'flip', emoji: '🪞' },
+    'W26':   { name: 'Galaxy W26',      icon: 'W26', cls: 'w26',  emoji: '💎' },
+};
+let allStatusData = null, allAlertsData = null;
+let activeFilterStore = '', activeFilterStatus = 'all';
+
+// ─── 初始化 ───
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.init()) return;
+    App.renderSidebar('inventory');
+    App.renderTopbar('库存监控');
+    await loadAll();
+});
+
+// ─── 文件上传 ───
+function onFileSelected(input) {
+    const file = input.files[0];
+    const nameEl = document.getElementById('fileName');
+    const btn = document.getElementById('uploadBtn');
+    if (file) { nameEl.textContent = file.name; btn.disabled = false; btn.style.opacity = '1'; }
+    else      { nameEl.textContent = '未选择文件'; btn.disabled = true; btn.style.opacity = '0.5'; }
+}
+
+async function uploadInventory() {
+    const fileInput = document.getElementById('inventoryFile');
+    const file = fileInput.files[0];
+    if (!file) return;
+    const btn = document.getElementById('uploadBtn');
+    const statusEl = document.getElementById('uploadStatus');
+    const resultEl = document.getElementById('uploadResult');
+    btn.disabled = true; btn.textContent = '⏳ 上传中...';
+    statusEl.textContent = ''; resultEl.innerHTML = '';
+    try {
+        const formData = new FormData(); formData.append('file', file);
+        const resp = await fetch(`/api/inventory/upload?token=${App.token}`, { method:'POST', body:formData });
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            statusEl.innerHTML = `<span style="color:var(--success); font-weight:600;">✅ ${data.message}（解析${data.parsed}条，导入${data.imported}条）</span>`;
+            resultEl.innerHTML = data.skipped > 0 ? `<small style="color:var(--warning);">⚠️ ${data.skipped}条记录因门店未匹配被跳过</small>` : '';
+            await loadAll();
+        } else {
+            statusEl.innerHTML = `<span style="color:var(--warning);">⚠️ ${data.message || '上传未产生有效数据'}</span>`;
+        }
+    } catch(e) {
+        statusEl.innerHTML = `<span style="color:var(--danger);">❌ 上传失败：${e.message}</span>`;
+    } finally {
+        btn.disabled = false; btn.textContent = '⬆️ 上传并导入';
+        fileInput.value = ''; document.getElementById('fileName').textContent = '未选择文件';
+    }
+}
+
+// ─── 主加载 ───
+async function loadAlerts() { await loadAll(); }
+
+async function loadAll() {
+    try {
+        const [statusData, alertsData] = await Promise.all([
+            App.api(`/inventory/status?token=${App.token}`),
+            App.api(`/inventory/alerts?token=${App.token}`)
+        ]);
+        allStatusData = statusData;
+        allAlertsData = alertsData;
+        renderStats(statusData, alertsData);
+        renderAlerts(alertsData);
+        renderFilterBar(statusData);
+        await loadRestockSuggestions();
+        renderSeriesBoards(statusData, alertsData);
+    } catch(e) { console.error(e); }
+}
+
+// ─── 1. 统计卡片增强 ───
+function renderStats(statusData, alertsData) {
+    let totalItems = 0, maxTime = '';
+    const storeSet = new Set();
+    for (const sName in statusData.series) {
+        statusData.series[sName].stores.forEach(store => {
+            store.items.forEach(item => {
+                totalItems++;
+                storeSet.add(store.store_id);
+                if (item.updated_at > maxTime) maxTime = item.updated_at;
+            });
+        });
+    }
+    // 计算缺货 SKU（qty = 0）
+    let outOfStock = 0;
+    for (const sName in statusData.series) {
+        statusData.series[sName].stores.forEach(store => {
+            store.items.forEach(item => { if ((item.qty||0) === 0) outOfStock++; });
+        });
+    }
+
+    document.getElementById('totalItems').textContent = totalItems;
+    document.getElementById('activeStores').textContent = storeSet.size || statusData.stores.length;
+    document.getElementById('outOfStock').textContent = outOfStock;
+    document.getElementById('outOfStock').style.color = outOfStock > 0 ? 'var(--danger)' : 'var(--success)';
+    document.getElementById('alertCount').textContent = (alertsData.alerts||[]).length;
+    document.getElementById('alertCount').style.color = (alertsData.alerts||[]).length > 0 ? 'var(--danger)' : 'var(--success)';
+    document.getElementById('lastUpdate').textContent = maxTime ? maxTime.substring(5, 16) : '--';
+
+    // 周转天数稍后由 suggest API 填充
+}
+
+// ─── 2. 智能补货建议 ───
+async function loadRestockSuggestions() {
+    try {
+        const data = await App.api(`/inventory/suggest?token=${App.token}`);
+        if (!data.suggestions) return;
+        renderRestock(data);
+        // 用整体数据更新周转天数
+        const totalStock = data.suggestions.reduce((s, r) => s + (r.current_stock||0), 0);
+        const totalDaily = data.suggestions.reduce((s, r) => s + (r.daily_avg_sales||0), 0);
+        const days = totalDaily > 0 ? Math.round(totalStock / totalDaily) : '--';
+        document.getElementById('turnoverDays').textContent = days;
+    } catch(e) { console.error('loadRestockSuggestions:', e); }
+}
+
+function renderRestock(data) {
+    const container = document.getElementById('restockContent');
+    const suggestions = (data.suggestions||[]).sort((a,b) => {
+        const pri = { urgent:0, warning:1, notice:2, ok:3 };
+        return (pri[a.priority]||9) - (pri[b.priority]||9);
+    });
+
+    if (suggestions.length === 0) {
+        container.innerHTML = '<p style="color:var(--gray-400); text-align:center; padding:16px;">暂无销售数据，无法生成补货建议</p>';
+        return;
+    }
+
+    let html = '';
+    // 整体建议
+    html += `<div style="font-size:13px; color:var(--text-secondary); margin-bottom:12px; padding:8px 12px; background:var(--gray-50); border-radius:6px;">
+        💡 ${data.model_series ? `分析范围：${data.model_series}` : ''} | 建议各门店保持至少7天安全库存量
+    </div>`;
+
+    // 按优先级分组卡片
+    const urgents = suggestions.filter(s => s.priority === 'urgent');
+    const warns = suggestions.filter(s => s.priority === 'warning');
+
+    if (urgents.length > 0) {
+        html += urgents.map(s => `
+            <div class="suggestion-card urgent">
+                <span style="font-size:20px;">🔴</span>
+                <div style="flex:1;">
+                    <strong>${s.store_name}</strong> — ${s.action}（库存${s.current_stock}台，日均销售${s.daily_avg_sales}台）
+                </div>
+                <span style="font-weight:700; white-space:nowrap;">${s.action}</span>
+            </div>
+        `).join('');
+    }
+
+    if (warns.length > 0) {
+        html += warns.map(s => `
+            <div class="suggestion-card warning">
+                <span style="font-size:20px;">🟡</span>
+                <div style="flex:1;">
+                    <strong>${s.store_name}</strong> — ${s.action}（库存${s.current_stock}台，日均销售${s.daily_avg_sales}台）
+                </div>
+                ${s.action ? `<span style="font-weight:700; white-space:nowrap;">${s.action}</span>` : ''}
+            </div>
+        `).join('');
+    }
+
+    // 正常状态折叠
+    const oks = suggestions.filter(s => s.priority === 'ok' || s.priority === 'notice');
+    if (oks.length > 0) {
+        html += `<details style="margin-top:8px;">
+            <summary style="cursor:pointer; font-size:13px; color:var(--inv-ok); font-weight:500;">
+                ✅ ${oks.filter(s=>s.priority==='ok').length}家门店库存充足 · ${oks.filter(s=>s.priority==='notice').length}家需关注（点击展开）
+            </summary>
+            <div style="margin-top:8px;">
+                ${oks.map(s => `
+                    <div class="suggestion-card ${s.priority}">
+                        <span style="font-size:16px;">${s.priority==='ok'?'✅':'🔵'}</span>
+                        <div style="flex:1;">
+                            <strong>${s.store_name}</strong> — ${s.action}（库存${s.current_stock}台，日均${s.daily_avg_sales}台）
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </details>`;
+    }
+
+    container.innerHTML = html;
+}
+
+// ─── 3. 筛选栏 ───
+function renderFilterBar(statusData) {
+    const bar = document.getElementById('filterBar');
+    bar.style.display = 'flex';
+    const storeSelect = document.getElementById('filterStore');
+    let opts = '<option value="">全部门店</option>';
+    if (statusData.stores) {
+        statusData.stores.forEach(s => {
+            opts += `<option value="${s.id}">${s.name.replace(/三星授权体验店|三星授权旗舰店|三星专卖店/g, '')}</option>`;
+        });
+    }
+    storeSelect.innerHTML = opts;
+    storeSelect.value = activeFilterStore;
+    updateFilterCount();
+}
+
+function setFilterStatus(status, el) {
+    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    activeFilterStatus = status;
+    applyFilters();
+}
+
+function applyFilters() {
+    activeFilterStore = document.getElementById('filterStore').value;
+    updateFilterCount();
+    renderSeriesBoards(allStatusData, allAlertsData);
+}
+
+function updateFilterCount() {
+    if (!allStatusData) return;
+    let all = 0, shown = 0;
+    getFilteredItems(allStatusData, function(_series, _store, item, _rule, visible) {
+        all++;
+        if (visible) shown++;
+    });
+    document.getElementById('filterCount').textContent = `显示 ${shown}/${all}`;
+}
+
+function getFilteredItems(statusData, callback) {
+    const rules = {};
+    (statusData.rules||[]).forEach(r => { rules[r.model_series] = r; });
+    for (const sk in statusData.series) {
+        const sd = statusData.series[sk];
+        const rule = rules[sk];
+        sd.stores.forEach(store => {
+            if (activeFilterStore && store.store_id != activeFilterStore) {
+                store.items.forEach(item => callback(sk, store, item, rule, false));
+                return;
+            }
+            store.items.forEach(item => {
+                const qty = item.qty || 0;
+                const th = rule?.threshold || 1;
+                let itemStatus = qty === 0 ? 'danger' : qty < th ? 'warning' : 'ok';
+                const visible = activeFilterStatus === 'all' || activeFilterStatus === itemStatus;
+                callback(sk, store, item, rule, visible);
+            });
+        });
+    }
+}
+
+// ─── 4. 系列看板（重构：概览条 + 缺货矩阵 + 筛选表格） ───
+function renderSeriesBoards(statusData, alertsData) {
+    const container = document.getElementById('heatmaps');
+    const rules = {};
+    (statusData.rules||[]).forEach(r => { rules[r.model_series] = r; });
+    let html = '';
+
+    for (const sk in SERIES_META) {
+        const meta = SERIES_META[sk];
+        const sd = statusData.series[sk];
+        const rule = rules[sk];
+        const th = rule?.threshold || 1;
+        if (!sd) continue;
+
+        // 收集该系列所有 Item
+        let allItems = [];
+        sd.stores.forEach(store => {
+            store.items.forEach(item => {
+                if (!activeFilterStore || store.store_id == activeFilterStore) {
+                    allItems.push({ ...item, store_name: store.store_name, store_id: store.store_id });
+                }
+            });
+        });
+        if (activeFilterStatus !== 'all') {
+            allItems = allItems.filter(item => {
+                const qty = item.qty || 0;
+                const s = qty === 0 ? 'danger' : qty < th ? 'warning' : 'ok';
+                return s === activeFilterStatus;
+            });
+        }
+
+        // 系列统计
+        const totalStock = allItems.reduce((s, i) => s + (i.qty||0), 0);
+        const storeIds = new Set(allItems.map(i => i.store_id));
+        const outItems = allItems.filter(i => (i.qty||0) === 0);
+        const lowItems = allItems.filter(i => (i.qty||0) > 0 && (i.qty||0) < th);
+
+        // 走势小图数据（选择已打卡的门店）
+        let trendBarHTML = '';
+        if (statusData.stores) {
+            const storeCount = statusData.stores.length;
+            for (let i = 0; i < Math.min(storeCount, 12); i++) {
+                // 模拟每个门店的库存占比柱状图
+                let storeTotal = 0;
+                (sd.stores[i]?.items||[]).forEach(it => { storeTotal += (it.qty||0); });
+                const maxH = Math.min(storeTotal > 0 ? 60 : 6, 60);
+                trendBarHTML += `<div class="bar" style="height:${maxH}px;" title="${sd.stores[i]?.store_name||''}: ${storeTotal}台"></div>`;
+            }
+        }
+
+        // 缺货色块矩阵
+        let matrixHTML = '';
+        const matrixItems = allItems.slice(0, 60); // 最多展示60个
+        if (matrixItems.length > 0) {
+            matrixHTML = `<div style="margin-top:10px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span style="font-size:11px; color:var(--gray-400);">缺货矩阵：</span>
+                <div class="stock-matrix" style="grid-template-columns:repeat(${Math.min(matrixItems.length, 20)}, 14px);">`;
+            matrixItems.forEach(item => {
+                const qty = item.qty || 0;
+                let cls = qty === 0 ? 'qty-0' : qty < th ? 'qty-low' : qty >= th * 2 ? 'qty-high' : 'qty-ok';
+                const tip = `${item.store_name} · ${item.model_code} ${item.color||''} ${item.spec||''}：${qty}台`;
+                matrixHTML += `<div class="cell ${cls}" title="${tip}">
+                    <div class="matrix-tooltip">${tip}</div>
+                </div>`;
+            });
+            matrixHTML += `</div></div>`;
+        }
+
+        // ── 系列概览条 ──
+        html += `<div class="card" style="margin-bottom:16px; overflow:hidden;">
+            <div class="series-overview-bar" style="margin-bottom:0; border:none; border-radius:0;">
+                <div class="so-icon ${meta.cls}">${meta.icon}</div>
+                <div class="so-info">
+                    <h4>${meta.emoji} ${meta.name}</h4>
+                    <small>${rule ? (rule.rule_type==='per_store_color_spec'?`预警：每店每色每规格≥${th}台`:`预警：${rule.rule_type==='per_store'?'每店':'全渠道'}≥${th}台`) : ''}</small>
+                </div>
+                <div class="so-metrics">
+                    <div class="so-metric"><div class="val">${totalStock}</div><div class="lbl">总库存</div></div>
+                    <div class="so-metric"><div class="val">${storeIds.size}</div><div class="lbl">门店</div></div>
+                    <div class="so-metric"><div class="val danger">${outItems.length}</div><div class="lbl">缺货项</div></div>
+                    <div class="so-metric"><div class="val warn">${lowItems.length}</div><div class="lbl">不足项</div></div>
+                </div>
+                ${trendBarHTML ? `<div class="trend-chart" style="min-width:100px; width:140px;">${trendBarHTML}</div>` : ''}
+            </div>
+            ${matrixHTML}
+            <!-- 明细表格（可折叠） -->
+            <details style="margin:0 16px 12px;">
+                <summary style="cursor:pointer; font-size:13px; color:var(--inv-blue); font-weight:500; padding:8px 0;">
+                    📋 查看明细（${allItems.length}条）
+                </summary>
+                <div style="overflow-x:auto; margin-top:4px;">
+                    <table class="data-table" style="font-size:13px;">
+                        <thead><tr>
+                            <th>门店</th><th>机型</th><th>颜色</th><th>规格</th>
+                            <th style="text-align:center;">库存</th><th>状态</th>
+                            <th>更新时间</th>
+                        </tr></thead>
+                        <tbody>`;
+
+        if (allItems.length === 0) {
+            html += `<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--gray-400);">暂无${meta.name}数据</td></tr>`;
+        } else {
+            allItems.forEach(item => {
+                const qty = item.qty || 0;
+                let status, statusClass;
+                if (qty === 0) { status = '缺货'; statusClass = 'danger'; }
+                else if (qty < th) { status = '不足'; statusClass = 'warning'; }
+                else { status = '正常'; statusClass = 'success'; }
+                const bgColor = qty === 0 ? '#fee2e2' : qty < th ? '#fef3c7' : '#ecfdf5';
+                html += `<tr style="background:${bgColor};">
+                    <td style="font-weight:500;">${item.store_name.replace(/三星授权体验店|三星授权旗舰店|三星专卖店/g, '')}</td>
+                    <td>${item.model_code}</td>
+                    <td>${item.color||'--'}</td>
+                    <td>${item.spec||'--'}</td>
+                    <td style="text-align:center; font-weight:700; font-size:15px;">${qty}</td>
+                    <td><span class="badge-tag ${statusClass}">${status}</span></td>
+                    <td style="font-size:11px; color:var(--gray-400);">${item.updated_at ? item.updated_at.substring(5,16) : '--'}</td>
+                </tr>`;
+            });
+        }
+        html += `</tbody></table></div></details></div>`;
+    }
+
+    container.innerHTML = html;
+}
+</script>
+<script src="/js/ai-assistant.js?v=3.0"></script>
+</body>
+</html>

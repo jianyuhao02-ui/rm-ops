@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1428a0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="三星管理">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <title>交流社区 - 三星事业部</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main-content">
+        <div class="topbar" id="topbar"></div>
+        <div class="page-content" id="mainContent">
+            <!-- 列表视图 -->
+            <div id="listView">
+                <!-- 发帖区 -->
+                <div class="card mb-4">
+                    <div class="card-body" style="padding:16px 20px;">
+                        <div style="display:flex; gap:12px; align-items:flex-start;">
+                            <div class="avatar" style="width:36px; height:36px; min-width:36px; font-size:14px;" id="postAvatar"></div>
+                            <div style="flex:1;">
+                                <div style="display:flex; gap:8px; margin-bottom:8px;">
+                                    <input type="text" id="postTitle" placeholder="标题" style="flex:1; padding:8px 12px; border:1px solid var(--gray-200); border-radius:var(--radius); font-size:14px;">
+                                    <select id="postCategory" style="padding:8px 12px; border:1px solid var(--gray-200); border-radius:var(--radius); font-size:13px;">
+                                        <option value="general">综合讨论</option>
+                                        <option value="sales">销售技巧</option>
+                                        <option value="product">产品咨询</option>
+                                        <option value="ops">运营管理</option>
+                                        <option value="complaint">客诉反馈</option>
+                                        <option value="suggest">建议意见</option>
+                                    </select>
+                                </div>
+                                <textarea id="postContent" placeholder="分享经验、提问交流..." rows="3" style="width:100%; padding:10px 12px; border:1px solid var(--gray-200); border-radius:var(--radius); font-size:14px; resize:vertical;"></textarea>
+                                <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                                    <button class="btn btn-primary" style="width:auto; padding:8px 20px; font-size:13px;" onclick="createPost()">发帖</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 分类筛选 -->
+                <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;" id="catFilter"></div>
+                <!-- 帖子列表 -->
+                <div id="postList"><div class="loading-spinner">加载中</div></div>
+            </div>
+
+            <!-- 详情视图 -->
+            <div id="detailView" style="display:none;">
+                <div id="postDetail"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .action-btn { font-size:12px; color:var(--primary); border:none; background:none; cursor:pointer; padding:4px 8px; border-radius:4px; }
+    .action-btn:hover { background:var(--primary); color:white; }
+    .action-btn.danger { color:var(--danger); }
+    .action-btn.danger:hover { background:var(--danger); color:white; }
+    .cat-tag { padding:6px 16px; font-size:13px; cursor:pointer; border-radius:20px; border:1px solid var(--gray-200); background:white; color:var(--gray-700); transition:all .15s; }
+    .cat-tag.active { background:var(--primary); color:white; border-color:var(--primary); }
+    .post-card { transition:all .15s; }
+    .post-card:hover { box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+    .comment-item { padding:12px 16px; border:1px solid var(--gray-100); border-radius:var(--radius); margin-bottom:8px; }
+    .comment-item.official { border-left:3px solid var(--primary); background:rgba(20,40,160,0.03); }
+    .like-btn { display:inline-flex; align-items:center; gap:4px; padding:4px 12px; border-radius:20px; border:1px solid var(--gray-200); background:white; cursor:pointer; font-size:13px; color:var(--gray-600); transition:all .15s; }
+    .like-btn:hover, .like-btn.liked { background:#ff6b6b; color:white; border-color:#ff6b6b; }
+    .reply-box { margin-top:12px; display:flex; gap:8px; }
+    .reply-box input { flex:1; padding:8px 12px; border:1px solid var(--gray-200); border-radius:var(--radius); font-size:13px; }
+    .back-btn { display:inline-flex; align-items:center; gap:4px; padding:6px 14px; border-radius:var(--radius); border:1px solid var(--gray-200); background:white; cursor:pointer; font-size:13px; margin-bottom:16px; color:var(--gray-700); }
+    .back-btn:hover { border-color:var(--primary); color:var(--primary); }
+    .category-label { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--gray-100); color:var(--gray-500); }
+    .category-label.sales { background:#e8f5e9; color:#2e7d32; }
+    .category-label.product { background:#e3f2fd; color:#1565c0; }
+    .category-label.ops { background:#fff3e0; color:#e65100; }
+    .category-label.complaint { background:#ffebee; color:#c62828; }
+    .category-label.suggest { background:#f3e5f5; color:#7b1fa2; }
+</style>
+
+<script src="/js/app.js"></script>
+<script>
+const CAT_LABELS = { general:'综合', sales:'销售', product:'产品', ops:'运营', complaint:'客诉', suggest:'建议' };
+let currentCatFilter = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.init()) return;
+    App.renderSidebar('community');
+    App.renderTopbar('交流社区');
+    document.getElementById('postAvatar').textContent = App.user?.display_name?.charAt(0) || 'U';
+    // 检查 URL 是否带帖子 ID
+    const urlParams = new URLSearchParams(window.location.search);
+    const postId = urlParams.get('id');
+    if (postId) {
+        await viewPost(parseInt(postId));
+    } else {
+        renderCatFilter();
+        await loadPosts();
+    }
+});
+
+function renderCatFilter() {
+    const cats = Object.entries(CAT_LABELS);
+    document.getElementById('catFilter').innerHTML = `
+        <div class="cat-tag ${currentCatFilter === null ? 'active' : ''}" onclick="filterCat(null)">全部</div>
+        ${cats.map(([k,v]) => `<div class="cat-tag ${currentCatFilter === k ? 'active' : ''}" onclick="filterCat('${k}')">${v}</div>`).join('')}
+    `;
+}
+
+async function filterCat(cat) {
+    currentCatFilter = cat;
+    renderCatFilter();
+    await loadPosts();
+}
+
+async function loadPosts() {
+    try {
+        let url = `/community/posts?token=${App.token}`;
+        if (currentCatFilter) url += `&category=${currentCatFilter}`;
+        const data = await App.api(url);
+        const posts = data.posts || [];
+        document.getElementById('postList').innerHTML = posts.length > 0
+            ? posts.map(p => renderPostCard(p)).join('')
+            : '<p style="color:var(--gray-400); text-align:center; padding:40px;">暂无帖子，来发第一条吧！</p>';
+    } catch(e) { console.error(e); }
+}
+
+function renderPostCard(p) {
+    const catClass = p.category || 'general';
+    return `
+    <div class="card mb-4 post-card" style="cursor:pointer;" onclick="viewPost(${p.id})">
+        <div class="card-body">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+                <span style="font-weight:600; font-size:14px;">${escapeHtml(p.author_name)}</span>
+                <span class="text-muted" style="font-size:12px;">${p.store_name || ''}</span>
+                <span class="category-label ${catClass}">${CAT_LABELS[p.category] || '综合'}</span>
+                <span class="text-muted" style="font-size:11px; margin-left:auto;">${formatTime(p.created_at)}</span>
+                ${p.is_resolved ? '<span class="badge-tag success">已解决</span>' : ''}
+                ${p.is_pinned ? '<span class="badge-tag warning">置顶</span>' : ''}
+            </div>
+            <h4 style="font-size:15px; margin-bottom:6px;">${escapeHtml(p.title)}</h4>
+            <p style="font-size:13px; color:var(--gray-600); line-height:1.6; overflow:hidden; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical;">${escapeHtml(p.content)}</p>
+            <div style="display:flex; gap:16px; margin-top:12px; font-size:12px; color:var(--gray-400);">
+                <span>💬 ${p.comment_count || 0} 回复</span>
+                <span>👍 ${p.likes || 0} 赞</span>
+                <span>👁 ${p.views} 浏览</span>
+            </div>
+        </div>
+    </div>`;
+}
+
+async function createPost() {
+    const title = document.getElementById('postTitle').value.trim();
+    const content = document.getElementById('postContent').value.trim();
+    const category = document.getElementById('postCategory').value;
+    if (!title || !content) { App.toast('请填写标题和内容', 'error'); return; }
+    try {
+        await App.api(`/community/posts?token=${App.token}`, { method:'POST', body:{ title, content, category }});
+        document.getElementById('postTitle').value = '';
+        document.getElementById('postContent').value = '';
+        App.toast('发帖成功！', 'success');
+        await loadPosts();
+    } catch(e) { App.toast('发帖失败', 'error'); }
+}
+
+async function viewPost(postId) {
+    history.pushState({ postId }, '', `/community?id=${postId}`);
+    document.getElementById('listView').style.display = 'none';
+    document.getElementById('detailView').style.display = '';
+    try {
+        const data = await App.api(`/community/post/${postId}?token=${App.token}`);
+        const p = data.post;
+        const comments = data.comments || [];
+        const isAdmin = App.user?.role === 'admin';
+        const isAuthor = App.user?.user_id === p.author_id;
+        const canManage = isAdmin || isAuthor;
+
+        document.getElementById('postDetail').innerHTML = `
+            <button class="back-btn" onclick="goBack()">← 返回列表</button>
+            <div class="card">
+                <div class="card-body">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+                        <span style="font-weight:600; font-size:15px;">${escapeHtml(p.author_name)}</span>
+                        <span class="text-muted" style="font-size:12px;">${p.store_name || ''}</span>
+                        <span class="category-label ${p.category || 'general'}">${CAT_LABELS[p.category] || '综合'}</span>
+                        <span class="text-muted" style="font-size:11px; margin-left:auto;">${formatTime(p.created_at)}</span>
+                        ${p.is_resolved ? '<span class="badge-tag success">已解决</span>' : ''}
+                    </div>
+                    <h3 style="font-size:18px; margin-bottom:12px;">${escapeHtml(p.title)}</h3>
+                    <div style="font-size:14px; line-height:1.8; color:var(--gray-700); white-space:pre-wrap;">${escapeHtml(p.content)}</div>
+                    <div style="display:flex; gap:12px; margin-top:20px; padding-top:16px; border-top:1px solid var(--gray-100); align-items:center;">
+                        <button class="like-btn" id="likeBtn" onclick="likePost(${p.id})">👍 ${p.likes || 0}</button>
+                        ${canManage ? `
+                            ${!p.is_resolved ? `<button class="action-btn" onclick="resolvePost(${p.id})">标记已解决</button>` : ''}
+                            <button class="action-btn danger" onclick="deletePost(${p.id})">删除</button>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:16px;">
+                <div class="card-header"><h3>💬 回复 (${comments.length})</h3></div>
+                <div class="card-body">
+                    <!-- 回复输入 -->
+                    <div class="reply-box">
+                        <input type="text" id="replyInput" placeholder="写下你的回复..." onkeydown="if(event.key==='Enter')addComment(${p.id})">
+                        <button class="btn btn-primary" style="width:auto; padding:8px 16px; font-size:13px;" onclick="addComment(${p.id})">回复</button>
+                        ${isAdmin ? '<label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--gray-500);"><input type="checkbox" id="officialReply">官方回复</label>' : ''}
+                    </div>
+                    <div style="margin-top:16px;" id="commentsArea">
+                        ${comments.length > 0 ? comments.map(c => renderComment(c)).join('') : '<p style="color:var(--gray-400); text-align:center; padding:20px;">暂无回复</p>'}
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch(e) { App.toast('加载失败', 'error'); }
+}
+
+function renderComment(c) {
+    return `
+    <div class="comment-item ${c.is_official ? 'official' : ''}">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <span style="font-weight:600; font-size:13px;">${escapeHtml(c.author_name)}</span>
+            ${c.is_official ? '<span class="badge-tag" style="background:var(--primary); color:white; font-size:10px;">官方</span>' : ''}
+            <span class="text-muted" style="font-size:11px;">${c.store_name || ''}</span>
+            <span class="text-muted" style="font-size:11px; margin-left:auto;">${formatTime(c.created_at)}</span>
+        </div>
+        <div style="font-size:13px; line-height:1.7; color:var(--gray-700); white-space:pre-wrap;">${escapeHtml(c.content)}</div>
+    </div>`;
+}
+
+async function addComment(postId) {
+    const input = document.getElementById('replyInput');
+    const content = input.value.trim();
+    if (!content) return;
+    const official = document.getElementById('officialReply')?.checked ? 1 : 0;
+    try {
+        await App.api(`/community/post/${postId}/comments?token=${App.token}`, { method:'POST', body:{ content, is_official:official }});
+        input.value = '';
+        App.toast('回复成功', 'success');
+        await viewPost(postId);
+    } catch(e) { App.toast('回复失败', 'error'); }
+}
+
+async function likePost(postId) {
+    try {
+        const data = await App.api(`/community/post/${postId}/like?token=${App.token}`, { method:'POST' });
+        const btn = document.getElementById('likeBtn');
+        btn.innerHTML = `👍 ${data.likes}`;
+        btn.classList.add('liked');
+        setTimeout(() => btn.classList.remove('liked'), 800);
+    } catch(e) {}
+}
+
+async function resolvePost(postId) {
+    if (!confirm('确定标记为已解决？')) return;
+    try {
+        await App.api(`/community/post/${postId}/resolve?token=${App.token}`, { method:'POST' });
+        App.toast('已标记为解决', 'success');
+        await viewPost(postId);
+    } catch(e) { App.toast('操作失败', 'error'); }
+}
+
+async function deletePost(postId) {
+    if (!confirm('确定删除这篇帖子？删除后不可恢复。')) return;
+    try {
+        await App.api(`/community/post/${postId}?token=${App.token}`, { method:'DELETE' });
+        App.toast('已删除', 'success');
+        goBack();
+    } catch(e) { App.toast('删除失败', 'error'); }
+}
+
+function goBack() {
+    history.pushState({}, '', '/community');
+    document.getElementById('listView').style.display = '';
+    document.getElementById('detailView').style.display = 'none';
+    loadPosts();
+}
+
+// 浏览器后退处理
+window.addEventListener('popstate', () => {
+    if (window.location.search.includes('id=')) {
+        const id = new URLSearchParams(window.location.search).get('id');
+        if (id) viewPost(parseInt(id));
+    } else {
+        document.getElementById('listView').style.display = '';
+        document.getElementById('detailView').style.display = 'none';
+        loadPosts();
+    }
+});
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function formatTime(str) {
+    if (!str) return '';
+    return str.substring(0, 16).replace('T', ' ');
+}
+</script>
+<script src="/js/ai-assistant.js?v=3.0"></script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1428a0">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <title>考勤打卡 - 三星事业部</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .punch-card { text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #1428a0, #2949d0); border-radius: 16px; color: #fff; margin-bottom: 20px; }
+        .punch-time { font-size: 48px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .punch-date { font-size: 14px; opacity: .8; margin-bottom: 20px; }
+        .punch-btn-wrap { display: flex; gap: 16px; justify-content: center; margin-top: 20px; }
+        .punch-btn { width: 120px; height: 120px; border-radius: 50%; border: none; font-size: 18px; font-weight: 700; cursor: pointer; transition: all .2s; }
+        .punch-btn.in { background: #10b981; color: #fff; }
+        .punch-btn.out { background: #f59e0b; color: #fff; }
+        .punch-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+        .punch-btn:hover:not(:disabled) { transform: scale(1.05); }
+        .status-tag { display: inline-flex; gap: 6px; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+        .status-tag.done { background: #d1fae5; color: #065f46; }
+        .status-tag.miss { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+<div class="app-layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main-content">
+        <div class="topbar" id="topbar"></div>
+        <div class="page-content">
+            <!-- 打卡卡片 -->
+            <div class="punch-card">
+                <div class="punch-date" id="punchDate"></div>
+                <div class="punch-time" id="punchClock">--:--:--</div>
+                <div style="margin-top:8px; font-size:13px; opacity:.8;" id="punchWeekday"></div>
+                <div class="punch-btn-wrap">
+                    <button class="punch-btn in" id="btnPunchIn" onclick="doPunch('in')">上班<br>打卡</button>
+                    <button class="punch-btn out" id="btnPunchOut" onclick="doPunch('out')">下班<br>打卡</button>
+                </div>
+                <div style="margin-top:12px; font-size:13px;" id="punchMsg"></div>
+            </div>
+
+            <!-- 今日记录 -->
+            <div class="card">
+                <div class="card-header"><h3>📋 今日打卡记录</h3></div>
+                <div class="card-body" id="todayRecords"><p style="color:var(--gray-400); text-align:center;">加载中...</p></div>
+            </div>
+
+            <!-- 月度汇总 -->
+            <div class="card" style="margin-top:16px;">
+                <div class="card-header"><h3>📊 月度考勤</h3>
+                    <input type="month" id="monthPicker" style="padding:6px 12px; border:1px solid var(--gray-200); border-radius:var(--radius); font-size:13px;" onchange="loadMonthly()">
+                </div>
+                <div class="card-body" style="overflow-x:auto;">
+                    <table class="data-table" style="min-width:500px;">
+                        <thead><tr><th>姓名</th><th>门店</th><th>出勤天数</th><th>上班打卡</th><th>下班打卡</th></tr></thead>
+                        <tbody id="monthlyBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+let todayStatus = {};
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.init()) return;
+    App.renderSidebar('attendance');
+    App.renderTopbar('考勤打卡');
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    const now = new Date();
+    document.getElementById('monthPicker').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    await loadTodayStatus();
+    await loadTodayRecords();
+    await loadMonthly();
+});
+
+function updateClock() {
+    const now = new Date();
+    document.getElementById('punchDate').textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
+    document.getElementById('punchClock').textContent = now.toLocaleTimeString('zh-CN', {hour12: false});
+    document.getElementById('punchWeekday').textContent = `星期${'日一二三四五六'[now.getDay()]}`;
+}
+
+async function loadTodayStatus() {
+    try {
+        todayStatus = await App.api(`/attendance/today?token=${App.token}`);
+        const btnIn = document.getElementById('btnPunchIn');
+        const btnOut = document.getElementById('btnPunchOut');
+        btnIn.disabled = todayStatus.has_punched_in;
+        btnOut.disabled = todayStatus.has_punched_out || !todayStatus.has_punched_in;
+        if (todayStatus.has_punched_in && todayStatus.has_punched_out) {
+            document.getElementById('punchMsg').innerHTML = '<span class="status-tag done">✅ 今日打卡完成</span>';
+        }
+    } catch(e) { console.error(e); }
+}
+
+async function doPunch(type) {
+    try {
+        await App.api(`/attendance/punch?token=${App.token}`, { method:'POST', body: { punch_type: type }});
+        App.toast(type === 'in' ? '上班打卡成功！' : '下班打卡成功！', 'success');
+        await loadTodayStatus();
+        await loadTodayRecords();
+    } catch(e) { App.toast('打卡失败: ' + e.message, 'error'); }
+}
+
+async function loadTodayRecords() {
+    try {
+        const data = await App.api(`/attendance/records?token=${App.token}`);
+        const records = data.records || [];
+        if (!records.length) {
+            document.getElementById('todayRecords').innerHTML = '<p style="color:var(--gray-400); text-align:center; padding:20px;">暂无打卡记录</p>';
+            return;
+        }
+        document.getElementById('todayRecords').innerHTML = records.map(r => {
+            const time = r.punch_time ? r.punch_time.substring(11, 16) : '';
+            return `<div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--gray-100);">
+                <span><strong>${r.user_name}</strong> · ${r.store_name || ''}</span>
+                <span class="status-tag ${r.punch_type==='in'?'done':''}">${r.punch_type==='in'?'🏢 上班':'🏠 下班'}</span>
+                <span style="color:var(--gray-400);">${time}</span>
+            </div>`;
+        }).join('');
+    } catch(e) { console.error(e); }
+}
+
+async function loadMonthly() {
+    const [y, m] = document.getElementById('monthPicker').value.split('-').map(Number);
+    try {
+        const data = await App.api(`/attendance/monthly?year=${y}&month=${m}&token=${App.token}`);
+        const rows = data.records || [];
+        document.getElementById('monthlyBody').innerHTML = rows.map(r => `
+            <tr>
+                <td style="font-weight:500;">${r.display_name}</td>
+                <td>${r.store_name || '--'}</td>
+                <td style="text-align:center;">${r.work_days}天</td>
+                <td style="text-align:center;">${r.in_count}次</td>
+                <td style="text-align:center;">${r.out_count}次</td>
+            </tr>
+        `).join('') || '<tr><td colspan="5" style="text-align:center; color:var(--gray-400);">暂无记录</td></tr>';
+    } catch(e) { console.error(e); }
+}
+</script>
+<script src="/js/ai-assistant.js?v=3.0"></script>
+</body>
+</html>

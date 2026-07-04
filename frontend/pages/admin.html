@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1428a0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="三星管理">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <title>后台管理 - 三星事业部</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main-content">
+        <div class="topbar" id="topbar"></div>
+        <div class="page-content">
+            <!-- 管理面板标签 -->
+            <div style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;">
+                <button class="btn admin-tab active" data-tab="users" onclick="showTab('users')">👤 用户管理</button>
+                <button class="btn admin-tab" data-tab="prices" onclick="showTab('prices')">💲 价格维护</button>
+                <button class="btn admin-tab" data-tab="targets" onclick="showTab('targets')">🎯 目标设置</button>
+                <button class="btn admin-tab" data-tab="kb" onclick="showTab('kb')">📚 知识库管理</button>
+                <button class="btn admin-tab" data-tab="scheduler" onclick="showTab('scheduler')">⏰ 定时任务</button>
+                <button class="btn admin-tab" data-tab="eboss" onclick="showTab('eboss')">📊 eBoss同步</button>
+            </div>
+
+            <!-- ========== 用户管理 ========== -->
+            <div class="card" id="panelUsers">
+                <div class="card-header">
+                    <h3>👤 用户管理</h3>
+                    <button class="btn btn-primary" style="padding:6px 16px; font-size:12px;" onclick="showUserModal()">+ 新增用户</button>
+                </div>
+                <div class="card-body" style="overflow-x:auto;">
+                    <table class="data-table" id="userTable">
+                        <thead><tr><th>ID</th><th>账号</th><th>姓名</th><th>角色</th><th>门店</th><th>状态</th><th>操作</th></tr></thead>
+                        <tbody><tr><td colspan="7" class="loading-spinner">加载中</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ========== 价格维护 ========== -->
+            <div class="card" id="panelPrices" style="display:none;">
+                <div class="card-header"><h3>💲 价格数据维护</h3></div>
+                <div class="card-body">
+                    <p style="color:var(--gray-500); font-size:14px; margin-bottom:16px;">可手动更新各平台价格、公司售价和活动信息。</p>
+                    <div id="priceEditArea"><div class="loading-spinner">加载中</div></div>
+                </div>
+            </div>
+
+            <!-- ========== 目标设置 ========== -->
+            <div class="card" id="panelTargets" style="display:none;">
+                <div class="card-header">
+                    <h3>🎯 月度目标设置</h3>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <select id="targetYear" onchange="loadTargets()"></select>
+                        <select id="targetMonth" onchange="loadTargets()"></select>
+                        <button class="btn btn-primary" style="padding:6px 16px; font-size:12px;" onclick="saveAllTargets()">💾 保存全部</button>
+                    </div>
+                </div>
+                <div class="card-body" style="overflow-x:auto;">
+                    <table class="data-table" id="targetTable">
+                        <thead><tr><th>门店</th><th>等级</th><th>手机销售目标</th><th>NCME目标</th><th>手机台量</th><th>重点机型</th><th>配件目标</th></tr></thead>
+                        <tbody><tr><td colspan="7" class="loading-spinner">加载中</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ========== 知识库管理 ========== -->
+            <div class="card" id="panelKb" style="display:none;">
+                <div class="card-header">
+                    <h3>📚 知识库管理</h3>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn" style="padding:6px 16px; font-size:12px; background:var(--primary); color:white;" onclick="showCategoryModal()">+ 新增分类</button>
+                        <button class="btn" style="padding:6px 16px; font-size:12px; background:white; border:1px solid var(--gray-200);" onclick="showArticleModal()">+ 新增文章</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div style="display:grid; grid-template-columns:280px 1fr; gap:16px;">
+                        <div>
+                            <h4 style="font-size:14px; margin-bottom:12px;">分类列表</h4>
+                            <div id="kbCatList"><div class="loading-spinner">加载中</div></div>
+                        </div>
+                        <div>
+                            <h4 style="font-size:14px; margin-bottom:12px;" id="kbArticleTitle">文章列表</h4>
+                            <div id="kbArticleList"><div class="loading-spinner">请先选择分类</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- ========== 定时任务状态 ========== -->
+            <div class="card" id="panelScheduler" style="display:none;">
+                <div class="card-header">
+                    <h3>⏰ 定时任务</h3>
+                    <span id="schedulerStatus" style="font-size:12px; padding:4px 12px; border-radius:12px;"></span>
+                </div>
+                <div class="card-body">
+                    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:16px;" id="schedulerJobs">
+                    </div>
+                    <div style="margin-top:20px; padding:16px; background:var(--gray-50); border-radius:8px;">
+                        <h4 style="font-size:14px; margin-bottom:8px;">📋 任务说明</h4>
+                        <table style="width:100%; font-size:13px;">
+                            <tr><td style="padding:4px 0; font-weight:600;">每日报量采集</td><td style="padding:4px 0;">22:30</td><td style="padding:4px 0;">从钉钉报量群拉取当天数据→写入数据库→更新Excel→推送汇总</td></tr>
+                            <tr><td style="padding:4px 0; font-weight:600;">库存预警检查</td><td style="padding:4px 0;">周一/四 9:30</td><td style="padding:4px 0;">检查四系列库存是否低于阈值→生成预警→推送通知</td></tr>
+                            <tr><td style="padding:4px 0; font-weight:600;">价格检查</td><td style="padding:4px 0;">每日 10:00</td><td style="padding:4px 0;">抓取九机网最新价格→比对数据库→价格变动推送</td></tr>
+                            <tr><td style="padding:4px 0; font-weight:600;">数据库备份</td><td style="padding:4px 0;">每日 3:00</td><td style="padding:4px 0;">自动备份数据库到桌面，保留最近7天</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== eBoss 同步 ========== -->
+            <div class="card" id="panelEboss" style="display:none;">
+                <div class="card-header">
+                    <h3>📊 eBoss 数据同步</h3>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button class="btn btn-primary" style="padding:6px 16px; font-size:12px;" onclick="triggerEbossScan()">🔄 立即扫描</button>
+                        <span id="ebossScanStatus" style="font-size:12px;"></span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- 统计卡片 -->
+                    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:12px; margin-bottom:20px;" id="ebossStats"></div>
+
+                    <!-- 文件类型说明 -->
+                    <div style="margin-bottom:20px; padding:14px; background:var(--gray-50); border-radius:8px; font-size:13px;">
+                        <h4 style="font-size:14px; margin-bottom:8px;">📁 eBoss 同步说明</h4>
+                        <table style="width:100%; font-size:13px;">
+                            <tr><td style="padding:3px 0; font-weight:600;">零售汇总</td><td style="padding:3px 0;">→ 每日销售数据（手机/配件/台量）写入 daily_sales</td></tr>
+                            <tr><td style="padding:3px 0; font-weight:600;">库存汇总</td><td style="padding:3px 0;">→ 四系列实时库存写入 inventory</td></tr>
+                            <tr><td style="padding:3px 0; font-weight:600;">扫描频率</td><td style="padding:3px 0;">每小时自动扫描 C:\eBoss\Local\，新文件自动导入</td></tr>
+                        </table>
+                    </div>
+
+                    <!-- 同步历史 -->
+                    <h4 style="font-size:14px; margin-bottom:10px;">📋 最近同步记录</h4>
+                    <div style="overflow-x:auto; max-height:400px; overflow-y:auto;">
+                        <table class="data-table" id="ebossLogTable">
+                            <thead><tr><th>文件名</th><th>类型</th><th>解析</th><th>导入</th><th>状态</th><th>时间</th></tr></thead>
+                            <tbody><tr><td colspan="6" class="loading-spinner">加载中</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== 通用 Modal ========== -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3 id="modalTitle">标题</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+    </div>
+</div>
+
+<style>
+    .admin-tab { padding:8px 20px !important; font-size:13px !important; border-radius:20px !important; border:1px solid var(--gray-200) !important; background:white !important; color:var(--gray-700) !important; cursor:pointer; }
+    .admin-tab.active { background:var(--primary) !important; color:white !important; border-color:var(--primary) !important; }
+    .form-row { margin-bottom:14px; }
+    .form-row label { display:block; font-size:13px; font-weight:600; margin-bottom:4px; color:var(--gray-700); }
+    .form-row input, .form-row select, .form-row textarea { width:100%; padding:8px 12px; border:1px solid var(--gray-200); border-radius:var(--radius); font-size:14px; box-sizing:border-box; }
+    .form-row textarea { min-height:120px; resize:vertical; font-family:inherit; }
+    .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .action-btn { font-size:12px; color:var(--primary); border:none; background:none; cursor:pointer; padding:4px 8px; border-radius:4px; }
+    .action-btn:hover { background:var(--primary); color:white; }
+    .action-btn.danger { color:var(--danger); }
+    .action-btn.danger:hover { background:var(--danger); color:white; }
+    .price-table input { width:100px; padding:4px 8px; border:1px solid var(--gray-200); border-radius:4px; font-size:13px; text-align:right; }
+    .price-table .activity-input { width:160px; text-align:left; }
+    .cat-item { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid var(--gray-100); border-radius:var(--radius); margin-bottom:8px; cursor:pointer; transition:all .15s; }
+    .cat-item:hover, .cat-item.active { border-color:var(--primary); background:rgba(20,40,160,0.04); }
+    .cat-item .cat-actions { display:flex; gap:4px; }
+    .article-row { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid var(--gray-100); border-radius:var(--radius); margin-bottom:8px; }
+</style>
+
+<script src="/js/app.js"></script>
+<script>
+let allStores = [];
+let currentKbCat = null;
+let tabInitialized = { users: false, prices: false, targets: false, kb: false, scheduler: false, eboss: false };
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.init()) return;
+    if (App.user?.role !== 'admin') {
+        document.querySelector('.page-content').innerHTML = '<p style="color:var(--danger); text-align:center; padding:40px;">⛔ 权限不足，仅管理员可访问</p>';
+        return;
+    }
+    App.renderSidebar('admin');
+    App.renderTopbar('后台管理');
+    // 加载门店列表
+    try { allStores = await App.api(`/auth/stores?token=${App.token}`); } catch(e) {}
+    // 初始化年月
+    const now = new Date();
+    const ySel = document.getElementById('targetYear');
+    const mSel = document.getElementById('targetMonth');
+    for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
+        const opt = document.createElement('option');
+        opt.value = y; opt.textContent = y + '年';
+        if (y === now.getFullYear()) opt.selected = true;
+        ySel.appendChild(opt);
+    }
+    for (let m = 1; m <= 12; m++) {
+        const opt = document.createElement('option');
+        opt.value = m; opt.textContent = m + '月';
+        if (m === now.getMonth() + 1) opt.selected = true;
+        mSel.appendChild(opt);
+    }
+    // 加载默认面板
+    await loadUsers();
+    tabInitialized.users = true;
+});
+
+// ========== Tab 切换 ==========
+function showTab(tab) {
+    document.querySelectorAll('.admin-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    ['Users', 'Prices', 'Targets', 'Kb', 'Scheduler', 'Eboss'].forEach(t => {
+        const el = document.getElementById('panel' + t);
+        if (el) el.style.display = t.toLowerCase() === tab ? '' : 'none';
+    });
+    // 懒加载
+    if (tab === 'prices' && !tabInitialized.prices) { loadPriceEdit(); tabInitialized.prices = true; }
+    if (tab === 'targets' && !tabInitialized.targets) { loadTargets(); tabInitialized.targets = true; }
+    if (tab === 'kb' && !tabInitialized.kb) { loadKbCategories(); tabInitialized.kb = true; }
+    if (tab === 'scheduler' && !tabInitialized.scheduler) { loadSchedulerStatus(); tabInitialized.scheduler = true; }
+    if (tab === 'eboss' && !tabInitialized.eboss) { loadEbossStatus(); tabInitialized.eboss = true; }
+}
+
+// ========== Modal ==========
+function showModal(title, bodyHtml) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalBody').innerHTML = bodyHtml;
+    document.getElementById('modalOverlay').classList.add('show');
+}
+function closeModal(e) {
+    if (e && e.target !== document.getElementById('modalOverlay')) return;
+    document.getElementById('modalOverlay').classList.remove('show');
+}
+
+// ========== 用户管理 ==========
+async function loadUsers() {
+    try {
+        const data = await App.api(`/auth/users?token=${App.token}`);
+        document.getElementById('userTable').querySelector('tbody').innerHTML = data.map(u => `
+            <tr>
+                <td>${u.id}</td>
+                <td style="font-weight:600;">${u.username}</td>
+                <td>${u.display_name}</td>
+                <td><span class="badge-tag ${u.role === 'admin' ? 'admin' : 'info'}">${u.role === 'admin' ? '管理员' : u.role === 'manager' ? '店长' : '店员'}</span></td>
+                <td>${u.store_name || '--'}</td>
+                <td><span class="badge-tag ${u.is_active ? 'success' : 'danger'}">${u.is_active ? '启用' : '禁用'}</span></td>
+                <td>
+                    <button class="action-btn" onclick="resetPassword('${u.username}')">重置密码</button>
+                    <button class="action-btn" onclick="toggleUser('${u.username}', ${u.is_active})">${u.is_active ? '禁用' : '启用'}</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch(e) { console.error(e); }
+}
+
+function showUserModal() {
+    const storeOptions = allStores.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    showModal('新增用户', `
+        <div class="form-row"><label>账号</label><input type="text" id="mu_username" placeholder="登录用户名"></div>
+        <div class="form-row"><label>姓名</label><input type="text" id="mu_display_name" placeholder="显示名称"></div>
+        <div class="form-grid">
+            <div class="form-row"><label>角色</label><select id="mu_role"><option value="manager">店长</option><option value="staff">店员</option><option value="admin">管理员</option></select></div>
+            <div class="form-row"><label>门店</label><select id="mu_store_id"><option value="">不绑定</option>${storeOptions}</select></div>
+        </div>
+        <div class="form-row"><label>初始密码</label><input type="text" id="mu_password" value="store123"></div>
+        <div style="text-align:right; margin-top:16px;">
+            <button class="btn" style="margin-right:8px;" onclick="closeModal()">取消</button>
+            <button class="btn btn-primary" onclick="doCreateUser()">确认创建</button>
+        </div>
+    `);
+}
+
+async function doCreateUser() {
+    const username = document.getElementById('mu_username').value.trim();
+    const display_name = document.getElementById('mu_display_name').value.trim();
+    const role = document.getElementById('mu_role').value;
+    const store_id = document.getElementById('mu_store_id').value || null;
+    const password = document.getElementById('mu_password').value;
+    if (!username || !display_name || !password) { App.toast('请填写完整信息', 'error'); return; }
+    try {
+        await App.api(`/auth/users/create?token=${App.token}`, { method:'POST', body:{ username, password, display_name, role, store_id: store_id ? parseInt(store_id) : null }});
+        App.toast('用户创建成功', 'success');
+        closeModal();
+        await loadUsers();
+    } catch(e) { App.toast(e.message || '创建失败', 'error'); }
+}
+
+async function resetPassword(username) {
+    const newPw = prompt('输入新密码（默认 store123）：');
+    if (newPw === null) return;
+    const pw = newPw.trim() || 'store123';
+    try {
+        await App.api(`/auth/users/reset-password?token=${App.token}&username=${encodeURIComponent(username)}&new_password=${pw}`, { method:'POST' });
+        App.toast('密码已重置', 'success');
+    } catch(e) { App.toast('重置失败', 'error'); }
+}
+
+async function toggleUser(username, isActive) {
+    const action = isActive ? '禁用' : '启用';
+    if (!confirm(`确定要${action}用户 ${username} 吗？`)) return;
+    try {
+        await App.api(`/auth/users/${encodeURIComponent(username)}/toggle?token=${App.token}`, { method:'PUT' });
+        App.toast(`已${action}`, 'success');
+        await loadUsers();
+    } catch(e) { App.toast('操作失败', 'error'); }
+}
+
+// ========== 价格维护 ==========
+async function loadPriceEdit() {
+    try {
+        const resp = await App.api(`/prices/dashboard?token=${App.token}`);
+        const models = resp.models || [];
+        let rows = [];
+        for (const m of models) {
+            for (const s of m.specs) {
+                rows.push({ model_code: m.code, model_name: m.name, spec: s.spec, jiuji_price: s.prices?.九机网?.price || 0, company_price: s.company_price || 0, activity: s.activity || '' });
+            }
+        }
+        document.getElementById('priceEditArea').innerHTML = `
+            <table class="data-table price-table">
+                <thead><tr><th>机型</th><th>规格</th><th>九机网</th><th>公司售价</th><th>活动内容</th><th></th></tr></thead>
+                <tbody>${rows.map(r => `
+                    <tr>
+                        <td style="font-weight:600;">${r.model_name}</td>
+                        <td>${r.spec}</td>
+                        <td><input type="text" value="${r.jiuji_price ? '¥' + r.jiuji_price : '--'}" disabled style="background:#f5f5f5; width:100px; padding:4px 8px; border:1px solid var(--gray-200); border-radius:4px; font-size:13px; text-align:right;"></td>
+                        <td><input type="text" id="cp_${r.model_code}_${r.spec}" value="${r.company_price || ''}" onchange="updatePrice('${r.model_code}','${r.spec}',this.value)"></td>
+                        <td><input type="text" class="activity-input" id="act_${r.model_code}_${r.spec}" value="${r.activity || ''}" onchange="updateActivity('${r.model_code}','${r.spec}',this.value)"></td>
+                        <td><span style="font-size:11px; color:var(--gray-400);">自动保存</span></td>
+                    </tr>
+                `).join('')}</tbody>
+            </table>
+        `;
+    } catch(e) { console.error(e); }
+}
+
+async function updatePrice(model, spec, val) {
+    const price = parseFloat(val) || 0;
+    try {
+        await App.api(`/prices/edit?token=${App.token}`, { method:'POST', body:{ model_code:model, spec, platform:'company', company_price:price }});
+        App.toast('售价已更新', 'success');
+    } catch(e) { App.toast('更新失败', 'error'); }
+}
+
+async function updateActivity(model, spec, val) {
+    try {
+        await App.api(`/prices/edit?token=${App.token}`, { method:'POST', body:{ model_code:model, spec, platform:'company', activity:val }});
+        App.toast('活动已更新', 'success');
+    } catch(e) { App.toast('更新失败', 'error'); }
+}
+
+// ========== 目标设置 ==========
+async function loadTargets() {
+    const year = document.getElementById('targetYear').value;
+    const month = document.getElementById('targetMonth').value;
+    try {
+        const data = await App.api(`/sales/targets?year=${year}&month=${month}&token=${App.token}`);
+        document.getElementById('targetTable').querySelector('tbody').innerHTML = data.map(t => `
+            <tr>
+                <td style="font-weight:600;">${t.store_name}</td>
+                <td><input type="text" id="tg_grade_${t.store_id}" value="${t.grade || ''}" style="width:40px; padding:4px 8px; border:1px solid var(--gray-200); border-radius:4px; font-size:13px; text-align:center;"></td>
+                <td><input type="number" id="tg_phone_${t.store_id}" value="${t.phone_sales_target || 0}" style="width:120px; padding:4px 8px; border:1px solid var(--gray-200); border-radius:4px; font-size:13px; text-align:right;"></td>
+                <td><input type="number" id="tg_ncme_${t.store_id}" value="${t.ncme_target || 0}" style="width:120px; padding:4px 8px; border:1px solid var(--gray-200); border-radius:4px; font-size:13px; text-align:right;"></td>
+                <td><input type="number" id="tg_qty_${t.store_id}" value="${t.phone_qty_target || 0}" style="width:80px; padding:4px 8px; border:1px solid var(--gray-200); border-radius:4px; font-size:13px; text-align:right;"></td>
+                <td><input type="number" id="tg_key_${t.store_id}" value="${t.key_model_target || 0}" style="width:80px; padding:4px 8px; border:1px solid var(--gray-200); border-radius:4px; font-size:13px; text-align:right;"></td>
+                <td><input type="number" id="tg_acc_${t.store_id}" value="${t.accessory_target || 0}" style="width:120px; padding:4px 8px; border:1px solid var(--gray-200); border-radius:4px; font-size:13px; text-align:right;"></td>
+            </tr>
+        `).join('');
+    } catch(e) {
+        document.getElementById('targetTable').querySelector('tbody').innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--gray-400);">加载失败</td></tr>';
+    }
+}
+
+async function saveAllTargets() {
+    const year = document.getElementById('targetYear').value;
+    const month = document.getElementById('targetMonth').value;
+    try {
+        const targets = [];
+        for (const s of allStores) {
+            const el = (prefix) => document.getElementById(`tg_${prefix}_${s.id}`);
+            targets.push({
+                year: parseInt(year),
+                month: parseInt(month),
+                store_id: s.id,
+                grade: el('grade')?.value || '',
+                phone_sales_target: parseFloat(el('phone')?.value) || 0,
+                ncme_target: parseFloat(el('ncme')?.value) || 0,
+                phone_qty_target: parseInt(el('qty')?.value) || 0,
+                key_model_target: parseInt(el('key')?.value) || 0,
+                accessory_target: parseFloat(el('acc')?.value) || 0,
+            });
+        }
+        await App.api(`/sales/targets?token=${App.token}`, { method:'POST', body:{ targets }});
+        App.toast('目标保存成功', 'success');
+    } catch(e) { App.toast('保存失败: ' + (e.message || ''), 'error'); }
+}
+
+// ========== 知识库管理 ==========
+async function loadKbCategories() {
+    try {
+        const cats = await App.api(`/knowledge/categories?token=${App.token}`);
+        document.getElementById('kbCatList').innerHTML = cats.map(c => `
+            <div class="cat-item ${currentKbCat === c.id ? 'active' : ''}" onclick="selectKbCat(${c.id})">
+                <span>${c.icon || ''} ${c.name} <small style="opacity:.5;">(${c.article_count})</small></span>
+                <div class="cat-actions">
+                    <button class="action-btn" onclick="event.stopPropagation();deleteKbCat(${c.id})">删除</button>
+                </div>
+            </div>
+        `).join('');
+        if (cats.length > 0 && !currentKbCat) selectKbCat(cats[0].id);
+    } catch(e) {}
+}
+
+async function selectKbCat(catId) {
+    currentKbCat = catId;
+    await loadKbCategories();
+    await loadKbArticles(catId);
+}
+
+async function loadKbArticles(catId) {
+    try {
+        const articles = await App.api(`/knowledge/articles?category_id=${catId}&token=${App.token}`);
+        document.getElementById('kbArticleTitle').textContent = `文章列表 (${articles.length})`;
+        document.getElementById('kbArticleList').innerHTML = articles.length > 0
+            ? articles.map(a => `
+                <div class="article-row">
+                    <div>
+                        <div style="font-size:14px; font-weight:600;">${a.title}</div>
+                        <div style="font-size:11px; color:var(--gray-400); margin-top:2px;">浏览 ${a.views || 0} · ${a.updated_at?.substring(0,10) || ''}</div>
+                    </div>
+                    <div style="display:flex; gap:4px;">
+                        <button class="action-btn" onclick="editArticle(${a.id},'${a.title.replace(/'/g,"\\'")}')">编辑</button>
+                        <button class="action-btn danger" onclick="deleteArticle(${a.id})">删除</button>
+                    </div>
+                </div>
+            `).join('')
+            : '<p style="color:var(--gray-400); text-align:center; padding:20px;">暂无文章</p>';
+    } catch(e) {}
+}
+
+function showCategoryModal() {
+    showModal('新增分类', `
+        <div class="form-row"><label>分类名称</label><input type="text" id="mc_name" placeholder="如：促销活动"></div>
+        <div class="form-row"><label>图标 Emoji</label><input type="text" id="mc_icon" placeholder="如：🏷️" value="📁"></div>
+        <div style="text-align:right; margin-top:16px;">
+            <button class="btn" style="margin-right:8px;" onclick="closeModal()">取消</button>
+            <button class="btn btn-primary" onclick="doCreateCategory()">创建</button>
+        </div>
+    `);
+}
+
+async function doCreateCategory() {
+    const name = document.getElementById('mc_name').value.trim();
+    const icon = document.getElementById('mc_icon').value.trim();
+    if (!name) { App.toast('请输入分类名称', 'error'); return; }
+    try {
+        await App.api(`/knowledge/categories?token=${App.token}`, { method:'POST', body:{ name, icon }});
+        App.toast('分类创建成功', 'success');
+        closeModal();
+        await loadKbCategories();
+    } catch(e) { App.toast(e.message || '创建失败', 'error'); }
+}
+
+async function deleteKbCat(catId) {
+    if (!confirm('确定删除此分类？分类下所有文章也会被删除。')) return;
+    try {
+        await App.api(`/knowledge/categories?token=${App.token}`, { method:'DELETE', body:{ category_id:catId }});
+        App.toast('分类已删除', 'success');
+        currentKbCat = null;
+        await loadKbCategories();
+    } catch(e) { App.toast('删除失败', 'error'); }
+}
+
+function showArticleModal(articleId) {
+    const catOptions = allKbCategories ? allKbCategories.map(c => `<option value="${c.id}" ${c.id === currentKbCat ? 'selected' : ''}>${c.icon || ''} ${c.name}</option>`).join('') : '';
+    showModal(articleId ? '编辑文章' : '新增文章', `
+        <div class="form-row"><label>标题</label><input type="text" id="ma_title" placeholder="文章标题"></div>
+        <div class="form-row"><label>内容</label><textarea id="ma_content" placeholder="文章内容（支持换行排版）"></textarea></div>
+        ${!articleId ? `<div class="form-row"><label>分类</label><select id="ma_cat_id">${catOptions}</select></div>` : ''}
+        <div style="text-align:right; margin-top:16px;">
+            <button class="btn" style="margin-right:8px;" onclick="closeModal()">取消</button>
+            <button class="btn btn-primary" onclick="doSaveArticle(${articleId || 'null'})">${articleId ? '保存' : '创建'}</button>
+        </div>
+    `);
+}
+
+async function editArticle(articleId, title) {
+    try {
+        const a = await App.api(`/knowledge/article/${articleId}?token=${App.token}`);
+        showArticleModal(articleId);
+        document.getElementById('ma_title').value = a.title;
+        document.getElementById('ma_content').value = a.content;
+    } catch(e) { App.toast('加载失败', 'error'); }
+}
+
+async function doSaveArticle(articleId) {
+    const title = document.getElementById('ma_title').value.trim();
+    const content = document.getElementById('ma_content').value.trim();
+    if (!title || !content) { App.toast('请填写标题和内容', 'error'); return; }
+    try {
+        if (articleId) {
+            await App.api(`/knowledge/article/${articleId}?token=${App.token}`, { method:'PUT', body:{ title, content }});
+        } else {
+            const cat_id = parseInt(document.getElementById('ma_cat_id').value);
+            await App.api(`/knowledge/articles?token=${App.token}`, { method:'POST', body:{ title, content, category_id:cat_id }});
+        }
+        App.toast(articleId ? '文章已更新' : '文章已创建', 'success');
+        closeModal();
+        if (currentKbCat) await loadKbArticles(currentKbCat);
+    } catch(e) { App.toast(e.message || '保存失败', 'error'); }
+}
+
+async function deleteArticle(articleId) {
+    if (!confirm('确定删除这篇文章？')) return;
+    try {
+        await App.api(`/knowledge/article/${articleId}?token=${App.token}`, { method:'DELETE' });
+        App.toast('文章已删除', 'success');
+        if (currentKbCat) await loadKbArticles(currentKbCat);
+    } catch(e) { App.toast('删除失败', 'error'); }
+}
+
+let allKbCategories = null;
+// 缓存分类列表供新增文章用
+const origSelectKbCat = selectKbCat;
+const _selectKbCat = selectKbCat;
+selectKbCat = async function(catId) {
+    if (!allKbCategories) {
+        try { allKbCategories = await App.api(`/knowledge/categories?token=${App.token}`); } catch(e) {}
+    }
+    return _selectKbCat(catId);
+};
+
+/* ===== 定时任务状态 ===== */
+async function loadSchedulerStatus() {
+    try {
+        const data = await App.api(`/notify/scheduler-status?token=${App.token}`);
+        const statusEl = document.getElementById('schedulerStatus');
+        if (data.running) {
+            statusEl.textContent = '● 运行中';
+            statusEl.style.cssText = 'font-size:12px;padding:4px 12px;border-radius:12px;background:#dcfce7;color:#16a34a;';
+        } else {
+            statusEl.textContent = '● 已停止';
+            statusEl.style.cssText = 'font-size:12px;padding:4px 12px;border-radius:12px;background:#fee2e2;color:#dc2626;';
+        }
+        const jobsEl = document.getElementById('schedulerJobs');
+        if (data.jobs && data.jobs.length) {
+            jobsEl.innerHTML = data.jobs.map(j => {
+                const nextTime = j.next_run ? new Date(j.next_run).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '--';
+                return `<div style="padding:16px; border:1px solid var(--gray-200); border-radius:8px;">
+                    <div style="font-weight:600; font-size:14px; margin-bottom:6px;">${j.name}</div>
+                    <div style="font-size:12px; color:var(--gray-500);">下次执行: ${nextTime}</div>
+                </div>`;
+            }).join('');
+        } else {
+            jobsEl.innerHTML = '<div style="color:var(--gray-500); font-size:14px;">暂无定时任务</div>';
+        }
+    } catch(e) {
+        document.getElementById('schedulerJobs').innerHTML = '<div style="color:#dc2626;">加载失败</div>';
+    }
+}
+</script>
+
+<script>
+/* ===== eBoss 同步管理 ===== */
+async function loadEbossStatus() {
+    try {
+        const data = await App.api(`/eboss/sync-status?token=${App.token}`);
+        // 统计卡片
+        const statsHtml = [
+            { label: '已处理文件', value: data.success_count, color: 'var(--success)' },
+            { label: '失败文件', value: data.error_count, color: data.error_count > 0 ? 'var(--danger)' : 'var(--gray-400)' },
+            { label: '销售数据', value: data.eboss_sales_records + '条', color: 'var(--primary)' },
+            { label: '总文件数', value: data.total_files, color: 'var(--gray-600)' },
+        ].map(s => `
+            <div style="padding:16px; background:var(--gray-50); border-radius:8px; text-align:center;">
+                <div style="font-size:24px; font-weight:700; color:${s.color};">${s.value}</div>
+                <div style="font-size:12px; color:var(--gray-500); margin-top:4px;">${s.label}</div>
+            </div>
+        `).join('');
+        document.getElementById('ebossStats').innerHTML = statsHtml;
+
+        // 同步日志
+        const tbody = document.getElementById('ebossLogTable').querySelector('tbody');
+        if (data.recent_logs && data.recent_logs.length > 0) {
+            tbody.innerHTML = data.recent_logs.map(log => {
+                const statusBadge = log.status === 'success'
+                    ? '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:11px;">成功</span>'
+                    : log.status === 'error'
+                    ? '<span style="background:#fef2f2;color:#991b1b;padding:2px 8px;border-radius:10px;font-size:11px;">失败</span>'
+                    : '<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:10px;font-size:11px;">跳过</span>';
+                const typeMap = { 'retail_summary': '零售汇总', 'inventory': '库存汇总', 'retail_order': '零售单', 'inventory_xlsx': '库存汇总' };
+                const typeName = typeMap[log.file_type] || log.file_type;
+                return `<tr>
+                    <td style="font-size:12px; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${log.file_name}">${log.file_name}</td>
+                    <td style="font-size:12px;">${typeName}</td>
+                    <td style="font-size:12px;">${log.records_parsed}</td>
+                    <td style="font-size:12px;">${log.records_imported}</td>
+                    <td>${statusBadge}</td>
+                    <td style="font-size:11px; color:var(--gray-500);">${log.synced_at ? log.synced_at.slice(5, 16) : '-'}</td>
+                </tr>`;
+            }).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--gray-500); padding:20px;">暂无同步记录</td></tr>';
+        }
+    } catch(e) {
+        document.getElementById('ebossStats').innerHTML = '<div style="color:#dc2626;">加载失败</div>';
+    }
+}
+
+async function triggerEbossScan() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '⏳ 扫描中...';
+    document.getElementById('ebossScanStatus').textContent = '扫描已触发，请稍候...';
+    try {
+        const data = await App.api(`/eboss/scan-now?token=${App.token}`, { method: 'POST' });
+        App.toast(data.message || '扫描任务已触发', data.status === 'ok' ? 'success' : 'error');
+        // 等待2秒后刷新状态
+        setTimeout(() => { loadEbossStatus(); }, 2000);
+    } catch(e) {
+        App.toast('扫描触发失败', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🔄 立即扫描';
+    }
+}
+</script>
+<script src="/js/ai-assistant.js?v=3.0"></script>
+</body>
+</html>

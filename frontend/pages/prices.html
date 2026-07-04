@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1428a0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="三星管理">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <title>价格看板 - 三星事业部</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main-content">
+        <div class="topbar" id="topbar"></div>
+        <div class="page-content">
+            <div class="card">
+                <div class="card-header">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <h3>💲 三星手机价格监控看板</h3>
+                        <span style="font-size:12px; color:var(--gray-400);" id="updateTime"></span>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-primary" style="padding:8px 16px; font-size:13px;" id="btnRefresh" onclick="loadPrices()">🔄 刷新</button>
+                    </div>
+                </div>
+                <div class="card-body" style="overflow-x:auto;">
+                    <table class="data-table" id="priceTable">
+                        <thead>
+                            <tr>
+                                <th>机型</th>
+                                <th>规格</th>
+                                <th>公司售价</th>
+                                <th>活动</th>
+                                <th>京东自营</th>
+                                <th>九机网</th>
+                                <th>抖音小时达</th>
+                                <th>美团闪购</th>
+                                <th>最低价</th>
+                                <th>价差</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="priceBody"><tr><td colspan="11" class="loading-spinner">加载中...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑弹窗 -->
+<div class="modal-overlay" id="editModal" style="display:none;">
+    <div class="modal-box" style="width:480px;">
+        <div class="modal-header">
+            <h3 id="modalTitle">编辑价格</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="editModelCode">
+            <input type="hidden" id="editSpec">
+            <div class="form-group">
+                <label>公司售价（¥）</label>
+                <input type="number" id="editCompanyPrice" placeholder="公司售价">
+            </div>
+            <div class="form-group">
+                <label>活动内容</label>
+                <input type="text" id="editActivity" placeholder="如：以旧换新享400元补贴">
+            </div>
+            <hr style="border:none; border-top:1px solid var(--gray-200); margin:16px 0;">
+            <p style="font-size:13px; color:var(--gray-500); margin-bottom:12px;">平台价格</p>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div class="form-group">
+                    <label>京东自营（¥）</label>
+                    <input type="number" id="editJD" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label>九机网（¥）</label>
+                    <input type="number" id="editJiJi" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label>抖音小时达（¥）</label>
+                    <input type="number" id="editDouyin" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label>美团闪购（¥）</label>
+                    <input type="number" id="editMeituan" placeholder="0">
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" style="background:var(--gray-200); color:var(--gray-700); padding:10px 20px;" onclick="closeModal()">取消</button>
+            <button class="btn btn-primary" style="width:auto; padding:10px 20px;" onclick="savePrice()">保存</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!App.init()) return;
+    App.renderSidebar('prices');
+    App.renderTopbar('价格看板');
+    await loadPrices();
+});
+
+async function loadPrices() {
+    try {
+        const data = await App.api(`/prices/dashboard?token=${App.token}`);
+        renderPriceTable(data.models);
+        document.getElementById('updateTime').textContent = `更新于 ${new Date().toLocaleString('zh-CN', {hour:'2-digit', minute:'2-digit'})}`;
+    } catch(e) { console.error(e); }
+}
+
+function renderPriceTable(models) {
+    const body = document.getElementById('priceBody');
+    let html = '';
+    const isAdmin = App.user?.role === 'admin';
+
+    models.forEach(model => {
+        model.specs.forEach((spec, idx) => {
+            const platforms = spec.prices || {};
+            const prices = ['京东自营', '九机网', '抖音小时达', '美团闪购'].map(p => platforms[p]?.price || 0);
+            const validPrices = prices.filter(p => p > 0);
+            const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : 0;
+            const companyPrice = spec.company_price || 0;
+
+            // 价差
+            let diffHtml = '<span class="text-muted">--</span>';
+            if (minPrice > 0 && companyPrice > 0) {
+                const diff = minPrice - companyPrice;
+                if (diff < 0) {
+                    diffHtml = `<span style="color:#b91c1c; font-weight:600; font-size:12px;">↓¥${Math.abs(diff).toLocaleString()}</span>`;
+                } else if (diff === 0) {
+                    diffHtml = `<span style="color:var(--gray-400);">持平</span>`;
+                } else {
+                    diffHtml = `<span style="color:#047857; font-size:12px;">↑¥${diff.toLocaleString()}</span>`;
+                }
+            }
+
+            // 公司售价
+            const cpHtml = companyPrice > 0
+                ? `<div class="company-price-box"><div class="company-price-value">¥${companyPrice.toLocaleString()}</div><div class="company-price-label">公司售价</div></div>`
+                : '<span class="text-muted">未设置</span>';
+
+            // 活动
+            const actHtml = spec.activity
+                ? `<span style="color:#92400e; font-size:11px; line-height:1.4;">${spec.activity}</span>`
+                : '<span class="text-muted">--</span>';
+
+            // 编辑按钮（仅管理员）
+            const editBtn = isAdmin
+                ? `<button class="btn" style="padding:4px 10px; font-size:12px; background:var(--primary-bg); color:var(--primary);" onclick="openEdit('${model.code}', '${spec.spec}')">编辑</button>`
+                : '<span class="text-muted" style="font-size:12px;">只读</span>';
+
+            // 最低价背景色（低于公司售价时微提示）
+            const minBg = minPrice > 0 && companyPrice > 0 && minPrice < companyPrice
+                ? 'background:rgba(220,38,38,.04);'
+                : '';
+
+            html += `<tr style="${minBg}">
+                ${idx === 0 ? `<td rowspan="${model.specs.length}" style="font-weight:700; vertical-align:middle; text-align:center;">
+                    <div>${model.name}</div>
+                    <small style="color:var(--gray-400);">${model.series}</small>
+                </td>` : ''}
+                <td style="text-align:center; font-weight:500;">${spec.spec}</td>
+                <td style="text-align:center;">${cpHtml}</td>
+                <td style="max-width:180px;">${actHtml}</td>
+                ${['京东自营', '九机网', '抖音小时达', '美团闪购'].map(p => {
+                    const pd = platforms[p] || {};
+                    const price = pd.price || 0;
+                    return `<td style="text-align:center;">
+                        ${price > 0 ? `<strong>¥${price.toLocaleString()}</strong><br><small class="text-muted">${(pd.time || '').substring(5,16)}</small>` : '<span class="text-muted">--</span>'}
+                    </td>`;
+                }).join('')}
+                <td style="text-align:center; font-weight:700; color:${minPrice > 0 ? 'var(--primary)' : 'var(--gray-400)'};">${minPrice > 0 ? '¥' + minPrice.toLocaleString() : '--'}</td>
+                <td style="text-align:center;">${diffHtml}</td>
+                <td style="text-align:center;">${editBtn}</td>
+            </tr>`;
+        });
+    });
+
+    body.innerHTML = html;
+}
+
+function openEdit(modelCode, spec) {
+    document.getElementById('editModelCode').value = modelCode;
+    document.getElementById('editSpec').value = spec;
+    document.getElementById('modalTitle').textContent = `编辑价格 - ${modelCode} ${spec}`;
+
+    // 读取当前数据填入
+    const rows = document.querySelectorAll('#priceBody tr');
+    for (const row of rows) {
+        if (row.querySelector(`td:nth-child(2)`)?.textContent?.trim() === spec) {
+            const cpBox = row.querySelector('.company-price-value');
+            if (cpBox) {
+                const val = cpBox.textContent.replace(/[¥,]/g, '');
+                document.getElementById('editCompanyPrice').value = val;
+            }
+        }
+    }
+
+    // 清空平台价格（让用户重新填入）
+    ['editJD', 'editJiJi', 'editDouyin', 'editMeituan'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('editActivity').value = '';
+
+    document.getElementById('editModal').style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('editModal').style.display = 'none';
+}
+
+async function savePrice() {
+    const modelCode = document.getElementById('editModelCode').value;
+    const spec = document.getElementById('editSpec').value;
+    const companyPrice = parseFloat(document.getElementById('editCompanyPrice').value) || 0;
+    const activity = document.getElementById('editActivity').value;
+
+    const platformMap = {
+        '京东自营': document.getElementById('editJD').value,
+        '九机网': document.getElementById('editJiJi').value,
+        '抖音小时达': document.getElementById('editDouyin').value,
+        '美团闪购': document.getElementById('editMeituan').value,
+    };
+
+    try {
+        for (const [platform, priceStr] of Object.entries(platformMap)) {
+            const price = parseFloat(priceStr) || 0;
+            if (price > 0) {
+                await App.api(`/prices/update?token=${App.token}&model_code=${modelCode}&spec=${spec}&platform=${encodeURIComponent(platform)}&price=${price}&company_price=${companyPrice}&activity=${encodeURIComponent(activity)}`, { method: 'POST' });
+            }
+        }
+        App.toast('价格已更新', 'success');
+        closeModal();
+        await loadPrices();
+    } catch(e) {
+        App.toast('更新失败: ' + e.message, 'error');
+    }
+}
+</script>
+<script src="/js/ai-assistant.js?v=3.0"></script>
+</body>
+</html>
