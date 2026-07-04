@@ -75,6 +75,9 @@ LOG_LEVEL = os.getenv("RM_LOG_LEVEL", "INFO")
 LOG_FILE = LOGS_DIR / "rm-ops.log"
 SCHEDULER_LOG_FILE = LOGS_DIR / "rm-scheduler.log"
 
+# ==================== 种子数据控制 ====================
+SEED_ENABLED = os.getenv("RM_SEED_ENABLED", "false").lower() == "true"
+
 
 def ensure_dirs():
     """确保所有必要目录存在，并迁移旧文件名以保证向后兼容"""
