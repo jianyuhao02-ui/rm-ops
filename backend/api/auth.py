@@ -209,12 +209,6 @@ async def toggle_user(
 @router.get("/stores")
 async def list_stores(
     user: dict = Depends(get_current_user)):
-    """获取门店列表（可选认证）"""
-    if token:
-        try:
-            await get_current_user(token)
-        except HTTPException:
-            pass  # token 无效也允许查看门店列表
 
     db = await get_db()
     cursor = await db.execute("SELECT id, name, province FROM stores WHERE is_active=1 ORDER BY sort_order")

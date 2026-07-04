@@ -677,8 +677,6 @@ async def upload_inventory_excel(
     """
     from backend.models.database import get_db
 
-    if token:
-        await get_current_user(token)
     # 保存上传文件到临时位置
     suffix = ".xls"
     if file.filename:

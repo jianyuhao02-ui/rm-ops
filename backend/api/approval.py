@@ -108,12 +108,12 @@ async def approve_request(
         raise HTTPException(status_code=400, detail="该审批已处理")
 
     new_status = body.status
-    approved_at = "datetime('now','localtime')" if new_status == "approved" else None
 
     await db.execute(
-        f"""UPDATE approvals SET status = ?, approved_at = {approved_at or 'NULL'}
+        """UPDATE approvals SET status = ?,
+           approved_at = CASE WHEN ? = 'approved' THEN datetime('now','localtime') ELSE NULL END
            WHERE id = ?""",
-        (new_status, approval_id)
+        (new_status, new_status, approval_id)
     )
     await db.commit()
 
